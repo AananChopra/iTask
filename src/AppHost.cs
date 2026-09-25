@@ -78,8 +78,8 @@ public sealed class AppHost : IDisposable
         var monitors = MonitorService.GetMonitors();
         Log.Info($"Monitors: {string.Join("; ", monitors.Select(m => $"{m.DeviceName} {m.Bounds} @{m.Scale:0.##}x{(m.IsPrimary ? " primary" : "")}"))}");
 
-        // v1: primary monitor only. Per-monitor support = widen this filter.
-        var targets = monitors.Where(m => m.IsPrimary).ToList();
+        // Every display gets its own top bar and dock.
+        var targets = monitors.ToList();
 
         foreach (var shell in _shells.ToList())
         {

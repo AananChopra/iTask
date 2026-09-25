@@ -10,62 +10,67 @@ using iTask.WindowsIntegration;
 namespace iTask.Dock;
 
 /// <summary>
-/// One dock icon: artwork with a scale-dependent drop shadow, an optional running dot, and the
-/// click bounce. Size and position are driven every frame by <see cref="DockWindow"/>.
+/// One dock icon at a fixed base size. Magnification is a render transform over a cached bitmap
+/// (GPU-scaled, no re-layout or re-rasterizing per frame), anchored at the bottom center.
+/// The running dot is a separate element so it doesn't grow with the icon.
 /// </summary>
 internal sealed class DockItemView : Grid
 {
-    private readonly DropShadowEffect _shadow;
+    private readonly ScaleTransform _scale = new();
     private readonly TranslateTransform _bounce = new();
-    private readonly Ellipse _dot;
     private readonly Image? _image;
 
-    private DockItemView(UIElement artwork, string name)
+    private DockItemView(UIElement artwork, string name, double size, double maxScale)
     {
-        _shadow = new DropShadowEffect { Direction = 270, Color = Colors.Black, RenderingBias = RenderingBias.Performance };
-        if (artwork is FrameworkElement fe)
-            fe.Effect = _shadow;
+        Width = Height = size;
         Children.Add(artwork);
-
-        _dot = new Ellipse
+        artwork.Effect = new DropShadowEffect
         {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Visibility = Visibility.Collapsed,
-            Effect = new DropShadowEffect { BlurRadius = 4, ShadowDepth = 0, Opacity = 0.3, Color = Colors.Black },
+            Direction = 270, ShadowDepth = Math.Max(1, size * 0.03), BlurRadius = Math.Max(4, size * 0.12),
+            Opacity = 0.3, Color = Colors.Black, RenderingBias = RenderingBias.Performance,
         };
-        _dot.SetResourceReference(Shape.FillProperty, "DockDotBrush");
-        Children.Add(_dot);
 
-        RenderTransform = _bounce;
+        RenderTransformOrigin = new Point(0.5, 1);
+        RenderTransform = new TransformGroup { Children = { _scale, _bounce } };
+        // Rasterize once at the largest size it will be shown at; magnifying then just scales pixels.
+        CacheMode = new BitmapCache(Math.Max(1, maxScale)) { SnapsToDevicePixels = false };
+
         Background = Brushes.Transparent; // hit-testable across the whole square
         ToolTip = name;
         ToolTipService.SetPlacement(this, PlacementMode.Top);
         ToolTipService.SetInitialShowDelay(this, 300);
         _image = artwork as Image;
+
+        double dot = Math.Max(3, size * 0.06);
+        Dot = new Ellipse { Width = dot, Height = dot, IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+        Dot.SetResourceReference(Shape.FillProperty, "DockDotBrush");
     }
 
     public RunningApp? App { get; private set; }
     public bool IsStart { get; private init; }
 
-    public static DockItemView ForApp(RunningApp app)
+    /// <summary>Running indicator; the dock places it under the icon.</summary>
+    public Ellipse Dot { get; }
+
+    public static DockItemView ForApp(RunningApp app, double size, double maxScale)
     {
         var image = new Image { Stretch = Stretch.Uniform };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-        var view = new DockItemView(image, app.Name) { App = app };
+        var view = new DockItemView(image, app.Name, size, maxScale) { App = app };
         view.Refresh();
         return view;
     }
 
-    public static DockItemView ForStart()
+    public static DockItemView ForStart(double size, double maxScale)
     {
         // Windows logo, sized like artwork inside a macOS icon's safe area.
-        var logo = new UniformGrid { Rows = 2, Columns = 2, Margin = new Thickness(14) };
+        var logo = new UniformGrid { Rows = 2, Columns = 2, Margin = new Thickness(Math.Round(size * 0.2)) };
         var blue = new SolidColorBrush(Color.FromRgb(0x00, 0x78, 0xD4));
         blue.Freeze();
-        foreach (var margin in new[] { new Thickness(0, 0, 1.5, 1.5), new Thickness(1.5, 0, 0, 1.5), new Thickness(0, 1.5, 1.5, 0), new Thickness(1.5, 1.5, 0, 0) })
+        double gap = Math.Max(1, size * 0.02);
+        foreach (var margin in new[] { new Thickness(0, 0, gap, gap), new Thickness(gap, 0, 0, gap), new Thickness(0, gap, gap, 0), new Thickness(gap, gap, 0, 0) })
             logo.Children.Add(new Border { Background = blue, CornerRadius = new CornerRadius(1.5), Margin = margin });
-        return new DockItemView(logo, "Start") { IsStart = true };
+        return new DockItemView(logo, "Start", size, maxScale) { IsStart = true };
     }
 
     /// <summary>Re-reads name/icon from the app (called when the running-apps list updates).</summary>
@@ -75,21 +80,10 @@ internal sealed class DockItemView : Grid
             return;
         _image.Source = App.LargeIcon;
         ToolTip = App.Name;
-        _dot.Visibility = Visibility.Visible; // everything but Start is a running app
+        Dot.Visibility = Visibility.Visible; // everything but Start is a running app
     }
 
-    /// <summary>Applies the per-frame scale-dependent styling from the design.</summary>
-    public void ApplyScale(double scale, double icon)
-    {
-        bool lifted = scale > 1.2;
-        _shadow.ShadowDepth = lifted ? Math.Max(2, icon * 0.05) : Math.Max(1, icon * 0.03);
-        _shadow.BlurRadius = 2 * (lifted ? Math.Max(4, icon * 0.1) : Math.Max(2, icon * 0.06));
-        _shadow.Opacity = 0.2 + (scale - 1) * 0.15;
-
-        double dot = Math.Max(3, icon * 0.06);
-        _dot.Width = _dot.Height = dot;
-        _dot.Margin = new Thickness(0, 0, 0, Math.Max(-2, -icon * 0.05));
-    }
+    public void SetScale(double scale) => _scale.ScaleX = _scale.ScaleY = scale;
 
     /// <summary>The design's click bounce: up and back, 0.2 s each way, ease-out.</summary>
     public void Bounce(double height)

@@ -36,7 +36,7 @@ public class OverlayWindow : Window
     protected virtual CornerStyle Corners => CornerStyle.Square;
 
     /// <summary>Which material this surface uses.</summary>
-    protected virtual BackdropKind GetBackdrop(ThemeService theme) => theme.DockBackdrop;
+    protected virtual BackdropKind GetBackdrop(ThemeService theme) => BackdropKind.Solid;
 
     private BackdropKind _backdrop;
     private bool _cloaked;
@@ -91,9 +91,14 @@ public class OverlayWindow : Window
         }
     }
 
+    private RECT? _bounds;
+
     /// <summary>Moves/resizes the window (physical pixels) and keeps it in the topmost band.</summary>
-    public virtual void SetBounds(RECT r) =>
+    public virtual void SetBounds(RECT r)
+    {
+        _bounds = r;
         SetWindowPos(Handle, HWND_TOPMOST, r.Left, r.Top, r.Width, r.Height, SWP_NOACTIVATE);
+    }
 
     /// <summary>Shows without activating (SW_SHOWNOACTIVATE) — never steals focus.</summary>
     public virtual void ShowPassive()
@@ -109,6 +114,13 @@ public class OverlayWindow : Window
             // Clicking the bar must not pull focus away from the user's app.
             handled = true;
             return new IntPtr(MA_NOACTIVATE);
+        }
+        if (msg == WM_DPICHANGED && _bounds is { } b)
+        {
+            // Moving onto a display with a different scale makes Windows (and WPF) resize us by the
+            // DPI ratio. Our bounds are already exact physical pixels, so put them back afterwards.
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, () =>
+                SetWindowPos(Handle, HWND_TOPMOST, b.Left, b.Top, b.Width, b.Height, SWP_NOACTIVATE));
         }
         if (msg == WM_NCACTIVATE && wParam == IntPtr.Zero && _backdrop == BackdropKind.Acrylic)
         {

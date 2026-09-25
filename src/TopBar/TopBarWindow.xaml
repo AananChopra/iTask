@@ -9,7 +9,8 @@
     </ui:OverlayWindow.Resources>
 
     <Border Background="{DynamicResource TopBarTintBrush}">
-        <Grid Margin="6,0">
+        <!-- Content keeps its row height even when the bar is taller (e.g. filling the taskbar's strip) -->
+        <Grid x:Name="BarContent" Margin="6,0" VerticalAlignment="Center">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />

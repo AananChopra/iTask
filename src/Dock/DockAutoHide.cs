@@ -94,8 +94,6 @@ public sealed class DockAutoHide : IDisposable
         else
         {
             var kind = ForegroundWatcher.Classify(_monitor.Handle, _monitor.Bounds);
-            if (kind == ForegroundKind.Transient)
-                return; // Start menu, Alt+Tab, a tray menu… don't jump around underneath it
             bool wasHidden = _wantHidden;
             _wantHidden = kind == ForegroundKind.Maximized;
             // Switching to a maximized app *from* the dock: stay put until the cursor leaves it.

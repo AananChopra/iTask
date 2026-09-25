@@ -43,7 +43,14 @@ public sealed class TrayHost : IDisposable
         // Explorer and forwards properly (for our bars and every other app's).
         _appBarForwarder = new AppBarManager(new ExplorerHelper(_area));
 
+        // Before the tray window exists, so nothing can ever read ManagedShell's default ("top").
+        var primary = MonitorService.GetPrimary();
+        if (primary is not null)
+            ReportExplorerTaskbar(primary);
+
         _area.Initialize();
+        if (primary is not null)
+            ReportExplorerTaskbar(primary);
         if (_area.IsFailed)
             Log.Warn("Tray host failed to initialize; tray icons will not be shown.");
 
@@ -57,14 +64,44 @@ public sealed class TrayHost : IDisposable
     /// <summary>Visible app tray icons, live-updating.</summary>
     public ICollectionView Icons { get; }
 
-    /// <summary>Tells apps where the tray lives, so their popups open next to it (below the top bar).</summary>
-    public void SetHostBounds(RECT bounds)
+    /// <summary>
+    /// Sets the answer to "where is the taskbar?" (ABM_GETTASKBARPOS), which now reaches our
+    /// Shell_TrayWnd first and which apps use to place their flyouts. Report where Explorer's taskbar
+    /// really is (its window keeps its rect while hidden). The saved StuckRects3 record isn't
+    /// reliable for this: on newer Windows 11 builds it can say "bottom" while the taskbar is at the top.
+    /// </summary>
+    public void ReportExplorerTaskbar(MonitorInfo primary)
     {
-        _area.SetTrayHostSizeData(new TrayHostSizeData
+        var b = primary.Bounds;
+        var edge = MsNative.ABEdge.ABE_BOTTOM;
+        int t = primary.ToPixels(48);
+
+        var taskbar = WindowUtils.FindExplorerTaskbar();
+        if (taskbar != IntPtr.Zero && NativeMethods.GetWindowRect(taskbar, out var r) && r.Width > 0 && r.Height > 0)
         {
-            edge = MsNative.ABEdge.ABE_TOP,
-            rc = new MsNative.Rect { Left = bounds.Left, Top = bounds.Top, Right = bounds.Right, Bottom = bounds.Bottom },
-        });
+            // The edge it hugs is the one its center is closest to.
+            int cx = (r.Left + r.Right) / 2, cy = (r.Top + r.Bottom) / 2;
+            var distances = new (MsNative.ABEdge edge, int d)[]
+            {
+                (MsNative.ABEdge.ABE_TOP, Math.Abs(cy - b.Top)),
+                (MsNative.ABEdge.ABE_BOTTOM, Math.Abs(b.Bottom - cy)),
+                (MsNative.ABEdge.ABE_LEFT, Math.Abs(cx - b.Left)),
+                (MsNative.ABEdge.ABE_RIGHT, Math.Abs(b.Right - cx)),
+            };
+            edge = distances.MinBy(x => x.d).edge;
+            int thickness = edge is MsNative.ABEdge.ABE_LEFT or MsNative.ABEdge.ABE_RIGHT ? r.Width : r.Height;
+            if (thickness > 0 && thickness < b.Height / 3)
+                t = thickness;
+        }
+
+        var rc = edge switch
+        {
+            MsNative.ABEdge.ABE_TOP => new MsNative.Rect { Left = b.Left, Top = b.Top, Right = b.Right, Bottom = b.Top + t },
+            MsNative.ABEdge.ABE_LEFT => new MsNative.Rect { Left = b.Left, Top = b.Top, Right = b.Left + t, Bottom = b.Bottom },
+            MsNative.ABEdge.ABE_RIGHT => new MsNative.Rect { Left = b.Right - t, Top = b.Top, Right = b.Right, Bottom = b.Bottom },
+            _ => new MsNative.Rect { Left = b.Left, Top = b.Bottom - t, Right = b.Right, Bottom = b.Bottom },
+        };
+        _area.SetTrayHostSizeData(new TrayHostSizeData { edge = edge, rc = rc });
     }
 
     private static bool IsShown(object item) =>

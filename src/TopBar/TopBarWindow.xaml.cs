@@ -17,6 +17,7 @@ public partial class TopBarWindow : OverlayWindow
         _services = services;
         InitializeComponent();
         DataContext = services;
+        BarContent.Height = settings.Height;
 
         if (settings.ShowRunningApps)
             RunningApps.ItemsSource = services.RunningApps.Apps;

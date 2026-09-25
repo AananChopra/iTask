@@ -8,16 +8,12 @@
          underneath, so the headroom that magnified icons grow into doesn't block anything. -->
     <Grid x:Name="Root">
 
-        <!-- Dock body (design: translucent dark panel, hairline border, inset highlight/lowlight, soft shadow) -->
+        <!-- Dock body: translucent rounded panel with a faint hairline border and a soft shadow -->
         <Border x:Name="Panel" HorizontalAlignment="Center" VerticalAlignment="Bottom"
                 Background="{DynamicResource DockPanelBrush}" BorderBrush="{DynamicResource DockBorderBrush}" BorderThickness="1">
             <Border.Effect>
-                <DropShadowEffect BlurRadius="30" ShadowDepth="6" Direction="270" Opacity="0.45" Color="Black" RenderingBias="Performance" />
+                <DropShadowEffect BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.3" Color="Black" RenderingBias="Performance" />
             </Border.Effect>
-            <Grid>
-                <Border x:Name="InsetTop" BorderBrush="{DynamicResource DockHighlightBrush}" BorderThickness="0,1,0,0" />
-                <Border x:Name="InsetBottom" BorderBrush="{DynamicResource DockLowlightBrush}" BorderThickness="0,0,0,1" />
-            </Grid>
         </Border>
 
         <!-- Icons: a sibling of the body (not a child) so they don't inherit its shadow and can rise above it -->

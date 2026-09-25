@@ -49,9 +49,9 @@ public static class SettingsStore
     /// </summary>
     private static void Migrate(AppSettings s)
     {
-        if (s.SettingsVersion < 2)
+        if (s.SettingsVersion < 3)
         {
-            // v2: macOS-style dock (64 px icons, magnification, 75% body over blur).
+            // v2: macOS-style dock with magnification. v3: smaller (48 px) and no separate blur layer.
             var d = new DockSettings();
             s.Dock.IconSize = d.IconSize;
             s.Dock.Magnification = d.Magnification;

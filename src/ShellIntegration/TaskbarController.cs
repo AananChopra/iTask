@@ -98,13 +98,9 @@ public sealed class TaskbarController : IDisposable
     private void Apply()
     {
         SetState(_originalState | ABS_AUTOHIDE);
+        // iTask draws a top bar and dock on every display, so every taskbar goes.
         foreach (var tray in FindTrayWindows())
-        {
-            // Only the primary taskbar is hidden outright: secondary monitors keep an auto-hide
-            // taskbar until iTask draws its own UI there.
-            if (WindowUtils.GetClassName(tray) == PrimaryTrayClass)
-                ShowWindow(tray, SW_HIDE);
-        }
+            ShowWindow(tray, SW_HIDE);
         Hook();
     }
 
@@ -132,7 +128,7 @@ public sealed class TaskbarController : IDisposable
     {
         if (!_active || idObject != OBJID_WINDOW || hwnd == IntPtr.Zero)
             return;
-        if (WindowUtils.GetClassName(hwnd) == PrimaryTrayClass)
+        if (WindowUtils.GetClassName(hwnd) is PrimaryTrayClass or SecondaryTrayClass)
             ShowWindow(hwnd, SW_HIDE);
     }
 

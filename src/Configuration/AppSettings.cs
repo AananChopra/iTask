@@ -20,7 +20,7 @@ public enum DockVisibility
 
 public sealed class AppSettings
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     /// <summary>Schema version of the saved file (0 = written before versioning existed).</summary>
     public int SettingsVersion { get; set; }
@@ -49,11 +49,11 @@ public sealed class TopBarSettings
 public sealed class DockSettings
 {
     /// <summary>Icon size in DIPs. The dock body is this plus padding (12%, min 8) on each side.</summary>
-    public double IconSize { get; set; } = 64;
+    public double IconSize { get; set; } = 48;
     /// <summary>Peak hover magnification (1 = off). macOS-style cosine falloff.</summary>
     public double Magnification { get; set; } = 1.8;
     /// <summary>Width in DIPs of the magnification wave around the cursor.</summary>
-    public double MagnificationRange { get; set; } = 300;
+    public double MagnificationRange { get; set; } = 240;
     /// <summary>Gap between the dock and the bottom edge of the screen, in DIPs.</summary>
     public double BottomMargin { get; set; } = 8;
     public DockVisibility Visibility { get; set; } = DockVisibility.Smart;
@@ -80,10 +80,8 @@ public sealed class AppearanceSettings
     /// bars are never activated, so it cross-fades to grey and back whenever you switch apps.
     /// </summary>
     public BackdropKind TopBarBackdrop { get; set; } = BackdropKind.Solid;
-    /// <summary>Dock material. "Blur" is activation-independent, so it doesn't flicker either.</summary>
-    public BackdropKind DockBackdrop { get; set; } = BackdropKind.Blur;
-    /// <summary>Opacity (0–1) of the dock body over its blur.</summary>
-    public double DockOpacity { get; set; } = 0.75;
+    /// <summary>Opacity (0–1) of the dock body; 1 = solid.</summary>
+    public double DockOpacity { get; set; } = 0.85;
     /// <summary>Opacity (0–1) of the tint layered over the top bar backdrop.</summary>
     public double TopBarOpacity { get; set; } = 0.15;
 }

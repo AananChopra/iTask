@@ -30,8 +30,7 @@ public sealed class MonitorShell : IDisposable
         _settings = settings;
         _services = services;
         _topBar = new TopBarWindow(settings.TopBar, services);
-        _dock = new DockWindow(settings.Dock, services.RunningApps,
-            blurBehind: services.Theme.DockBackdrop != BackdropKind.Solid);
+        _dock = new DockWindow(settings.Dock, services.RunningApps);
         _dock.ContentChanged += (_, _) => RequestLayout();
         _dockAutoHide = new DockAutoHide(_dock, services.Foreground, monitor);
     }
@@ -101,11 +100,25 @@ public sealed class MonitorShell : IDisposable
 
         // Top bar: full-width strip reserved from the work area.
         int topHeight = m.ToPixels(_settings.TopBar.Height);
-        RECT topRect = _topAppBar?.Reserve(m.Bounds, topHeight)
-                       ?? new RECT(m.Bounds.Left, m.Bounds.Top, m.Bounds.Right, m.Bounds.Top + topHeight);
+        RECT topRect;
+        var nativeTaskbar = _settings.Shell.HideNativeTaskbar ? WindowUtils.FindExplorerTaskbarAtTop(m) : null;
+        if (nativeTaskbar is { } tb)
+        {
+            // The (hidden) Windows taskbar is docked at the top and keeps its strip reserved. Occupy
+            // that strip rather than stacking below it: maximized windows start right under the bar,
+            // and Windows' own flyouts (volume, Wi-Fi…), which anchor to the taskbar, open flush under
+            // it. Stay registered with zero thickness so full-screen notifications keep arriving.
+            _topAppBar?.Reserve(m.Bounds, 0);
+            topRect = new RECT(m.Bounds.Left, m.Bounds.Top, m.Bounds.Right, Math.Max(m.Bounds.Top + topHeight, tb.Bottom));
+        }
+        else
+        {
+            topRect = _topAppBar?.Reserve(m.Bounds, topHeight)
+                      ?? new RECT(m.Bounds.Left, m.Bounds.Top, m.Bounds.Right, m.Bounds.Top + topHeight);
+        }
         _topBar.SetBounds(topRect);
         if (m.IsPrimary)
-            _services.Tray?.SetHostBounds(topRect);
+            _services.Tray?.ReportExplorerTaskbar(m);
 
         // Dock: centered at the bottom. Its window includes transparent room for magnified icons;
         // the body floats BottomMargin above the window's (and the screen's) bottom edge.

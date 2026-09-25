@@ -24,7 +24,6 @@ internal static class NativeMethods
 {
     // ── Window styles ────────────────────────────────────────────────────────
     public const int GWL_STYLE = -16;
-    public const int GWLP_HWNDPARENT = -8; // the owner, for top-level windows
     public const int GWL_EXSTYLE = -20;
 
     public const long WS_POPUP = 0x80000000L;
@@ -54,6 +53,7 @@ internal static class NativeMethods
     public const int WM_SETTINGCHANGE = 0x001A;
     public const int WM_MOUSEACTIVATE = 0x0021;
     public const int WM_NCACTIVATE = 0x0086;
+    public const int WM_DPICHANGED = 0x02E0;
     public const int MA_NOACTIVATE = 3;
     public const int SPI_SETWORKAREA = 0x002F;
 
@@ -301,6 +301,10 @@ internal static class NativeMethods
 
     // ── DWM ──────────────────────────────────────────────────────────────────
     public const int DWMWA_CLOAK = 13;
+    public const int DWMWA_CLOAKED = 14;
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     public const int DWMWA_BORDER_COLOR = 34;
@@ -330,15 +334,7 @@ internal static class NativeMethods
     // Undocumented but long-stable accent API; used only as the "Blur" backdrop fallback.
     public const int WCA_ACCENT_POLICY = 19;
     public const int ACCENT_DISABLED = 0;
-    public const int ACCENT_ENABLE_BLURBEHIND = 3;
     public const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
-
-    [DllImport("gdi32.dll")]
-    public static extern IntPtr CreateRoundRectRgn(int left, int top, int right, int bottom, int widthEllipse, int heightEllipse);
-
-    /// <summary>The system takes ownership of <paramref name="region"/> on success.</summary>
-    [DllImport("user32.dll")]
-    public static extern int SetWindowRgn(IntPtr hWnd, IntPtr region, [MarshalAs(UnmanagedType.Bool)] bool redraw);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct AccentPolicy

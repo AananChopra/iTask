@@ -48,23 +48,6 @@ public static class Backdrop
         }
     }
 
-    /// <summary>
-    /// Plain, untinted blur of what's behind the window (the CSS <c>backdrop-filter: blur()</c>
-    /// equivalent). Independent of window activation, so it never flickers.
-    /// </summary>
-    public static void ApplyBlurBehind(HwndSource source, bool isDark)
-    {
-        var hwnd = source.Handle;
-        source.CompositionTarget.BackgroundColor = Colors.Transparent;
-        var margins = new MARGINS { Left = -1, Right = -1, Top = -1, Bottom = -1 };
-        DwmExtendFrameIntoClientArea(hwnd, ref margins);
-        SetInt(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, isDark ? 1 : 0);
-        SetInt(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND); // shape comes from a window region
-        SetInt(hwnd, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE);
-        SetInt(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE);
-        SetAccent(hwnd, ACCENT_ENABLE_BLURBEHIND, 0);
-    }
-
     private static void SetInt(IntPtr hwnd, int attribute, int value) =>
         DwmSetWindowAttribute(hwnd, attribute, ref value, sizeof(int));
 

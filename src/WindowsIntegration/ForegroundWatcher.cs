@@ -3,11 +3,9 @@ using static iTask.WindowsIntegration.NativeMethods;
 
 namespace iTask.WindowsIntegration;
 
-/// <summary>What the user is currently looking at, as far as the dock cares.</summary>
+/// <summary>What is in front on a display, as far as the dock cares.</summary>
 public enum ForegroundKind
 {
-    /// <summary>Shell surface, popup menu, hidden owner window… keep whatever state we had.</summary>
-    Transient,
     /// <summary>The desktop, or nothing (all windows minimized).</summary>
     Desktop,
     /// <summary>A normal, non-maximized application window.</summary>
@@ -65,29 +63,53 @@ public sealed class ForegroundWatcher : IDisposable
 
     public event EventHandler? Changed;
 
-    /// <summary>Classifies the current foreground window relative to one monitor.</summary>
+    /// <summary>
+    /// Classifies what is in front on one display: the front-most real app window there, by z-order.
+    /// Per display rather than "the focused app", so each dock reacts to its own screen — a
+    /// maximized window on display 2 hides dock 2 even while you're typing on display 1.
+    /// </summary>
     public static ForegroundKind Classify(IntPtr monitor, RECT monitorBounds)
     {
-        var hwnd = GetForegroundWindow();
-        if (hwnd == IntPtr.Zero)
+        var front = FrontMostAppWindow(monitor);
+        if (front == IntPtr.Zero)
             return ForegroundKind.Desktop;
-
-        var cls = WindowUtils.GetClassName(hwnd);
-        if (DesktopClasses.Contains(cls) || hwnd == GetShellWindow())
-            return ForegroundKind.Desktop;
-        if (TransientClasses.Contains(cls) || WindowUtils.IsOwnWindow(hwnd) || !IsWindowVisible(hwnd))
-            return ForegroundKind.Transient;
-        if (IsIconic(hwnd))
-            return ForegroundKind.Desktop;
-        if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) != monitor)
-            return ForegroundKind.Windowed; // the app is on another display; this monitor is "free"
-
-        if (IsZoomed(hwnd))
+        if (IsZoomed(front))
             return ForegroundKind.Maximized;
-        if (GetWindowRect(hwnd, out var r) && r.Left <= monitorBounds.Left && r.Top <= monitorBounds.Top &&
+        if (GetWindowRect(front, out var r) && r.Left <= monitorBounds.Left && r.Top <= monitorBounds.Top &&
             r.Right >= monitorBounds.Right && r.Bottom >= monitorBounds.Bottom)
             return ForegroundKind.Maximized; // borderless full-screen
         return ForegroundKind.Windowed;
+    }
+
+    private static IntPtr FrontMostAppWindow(IntPtr monitor)
+    {
+        var found = IntPtr.Zero;
+        EnumWindows((hwnd, _) =>
+        {
+            if (!IsAppWindow(hwnd) || MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) != monitor)
+                return true;
+            found = hwnd;
+            return false; // EnumWindows walks top to bottom, so the first match is the front-most
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    /// <summary>A visible, on-this-desktop application window (not a shell surface, overlay or tool window).</summary>
+    private static bool IsAppWindow(IntPtr hwnd)
+    {
+        if (!IsWindowVisible(hwnd) || IsIconic(hwnd))
+            return false;
+        long ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
+        if ((ex & WS_EX_TOPMOST) != 0 || (ex & WS_EX_NOACTIVATE) != 0)
+            return false; // overlays, widgets, our own bars
+        if ((ex & WS_EX_TOOLWINDOW) != 0 && (ex & WS_EX_APPWINDOW) == 0)
+            return false;
+        if (DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0 && cloaked != 0)
+            return false; // other virtual desktops, suspended UWP frames
+        var cls = WindowUtils.GetClassName(hwnd);
+        if (DesktopClasses.Contains(cls) || TransientClasses.Contains(cls) || WindowUtils.IsOwnWindow(hwnd))
+            return false;
+        return GetWindowRect(hwnd, out var r) && r.Width > 1 && r.Height > 1;
     }
 
     private void OnForegroundEvent(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)

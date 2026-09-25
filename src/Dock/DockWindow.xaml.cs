@@ -9,7 +9,6 @@ using iTask.Configuration;
 using iTask.ShellIntegration;
 using iTask.UI;
 using iTask.WindowsIntegration;
-using static iTask.WindowsIntegration.NativeMethods;
 
 namespace iTask.Dock;
 
@@ -17,18 +16,18 @@ namespace iTask.Dock;
 /// macOS-style dock, ported from the "mac-os-dock" React design:
 ///  • icons magnify with a cosine falloff around the cursor, and the dock widens to fit;
 ///  • scales/positions ease toward their targets every frame (lerp 0.2 hovering, 0.12 leaving);
-///  • click bounce, running dots, scale-dependent icon shadows.
+///  • click bounce and running dots.
 /// The window is taller and wider than the body so magnified icons have room; that extra area is
-/// fully transparent and click-through.
+/// fully transparent and click-through. Per frame only transforms, Canvas offsets and two widths
+/// change — no image re-scaling, no effect updates.
 /// </summary>
 public partial class DockWindow : OverlayWindow
 {
-    private const double SideMargin = 28; // room for the body's shadow
+    private const double SideMargin = 20; // room for the body's shadow
 
     private readonly DockSettings _settings;
-    private readonly DockBlurWindow? _blur;
-    private readonly List<DockItemView> _items = new();
     private readonly RunningAppsService _runningApps;
+    private readonly List<DockItemView> _items = new();
 
     private double[] _scales = Array.Empty<double>();
     private double[] _positions = Array.Empty<double>();
@@ -38,32 +37,32 @@ public partial class DockWindow : OverlayWindow
     private RECT _bounds;
     private DockItemView? _pressed;
 
-    public DockWindow(DockSettings settings, RunningAppsService runningApps, bool blurBehind)
+    public DockWindow(DockSettings settings, RunningAppsService runningApps)
     {
         _settings = settings;
         _runningApps = runningApps;
         InitializeComponent();
 
-        if (blurBehind)
-            _blur = new DockBlurWindow();
-
         Panel.CornerRadius = new CornerRadius(Radius);
-        InsetTop.CornerRadius = InsetBottom.CornerRadius = new CornerRadius(Math.Max(0, Radius - 1));
+        Panel.Height = PanelHeight;
+        Panel.Margin = new Thickness(0, 0, 0, _settings.BottomMargin);
+        Icons.Height = IconDip;
+        Icons.Margin = new Thickness(0, 0, 0, _settings.BottomMargin + Pad);
 
-        _items.Add(DockItemView.ForStart());
+        AddItem(DockItemView.ForStart(IconDip, MaxScale));
         if (settings.ShowRunningApps)
             runningApps.Apps.CollectionChanged += OnAppsChanged;
         SyncItems();
 
         MouseMove += OnMouseMove;
         MouseLeave += (_, _) => SetMouseX(null);
-        IsVisibleChanged += OnVisibleChanged;
+        IsVisibleChanged += (_, _) => { if (!IsVisible) SetMouseX(null); };
     }
 
     /// <summary>The set of items changed, so the dock needs a new size.</summary>
     public event EventHandler? ContentChanged;
 
-    // ── Metrics (the design's desktop values, derived from the icon size) ─────────────────────
+    // ── Metrics (the design's proportions, derived from the icon size) ───────────────────────
 
     private double IconDip => _settings.IconSize;
     private double Spacing => Math.Max(4, IconDip * 0.08);
@@ -76,7 +75,7 @@ public partial class DockWindow : OverlayWindow
     public double PanelHeight => IconDip + 2 * Pad;
 
     /// <summary>Space above the body for magnified icons plus the click bounce.</summary>
-    private double Headroom => IconDip * (MaxScale - 1) + IconDip * 0.2 + 6;
+    private double Headroom => IconDip * (MaxScale - 1) + IconDip * 0.2 + 4;
 
     /// <summary>Window size (DIPs) that fits the dock at its widest magnification.</summary>
     public Size GetWindowSize()
@@ -105,12 +104,34 @@ public partial class DockWindow : OverlayWindow
         }
     }
 
+    public override void SetBounds(RECT r)
+    {
+        _bounds = r;
+        base.SetBounds(r);
+    }
+
+    // Per-pixel transparent window: it has no DWM material of its own.
+    public override void ApplyTheme(ThemeService theme) { }
+
     // ── Items ────────────────────────────────────────────────────────────────────────────────
 
     private void OnAppsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         SyncItems();
         ContentChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void AddItem(DockItemView item)
+    {
+        item.MouseLeftButtonDown += OnItemMouseDown;
+        item.MouseLeftButtonUp += OnItemMouseUp;
+        item.MouseRightButtonUp += OnItemRightClick;
+        Icons.Children.Add(item);
+        Icons.Children.Add(item.Dot);
+        Canvas.SetBottom(item, 0);
+        Canvas.SetBottom(item.Dot, Math.Max(-2, -IconDip * 0.05));
+        System.Windows.Controls.Panel.SetZIndex(item.Dot, 100);
+        _items.Add(item);
     }
 
     private void SyncItems()
@@ -123,27 +144,16 @@ public partial class DockWindow : OverlayWindow
         {
             _items.Remove(gone);
             Icons.Children.Remove(gone);
+            Icons.Children.Remove(gone.Dot);
         }
-        foreach (var app in apps)
+        foreach (var app in apps.Where(a => _items.All(i => i.App != a)))
         {
-            var view = _items.FirstOrDefault(i => i.App == app);
-            if (view is null)
-            {
-                view = DockItemView.ForApp(app);
-                app.PropertyChanged += (_, _) => Dispatcher.BeginInvoke(view.Refresh);
-                _items.Add(view);
-            }
+            var view = DockItemView.ForApp(app, IconDip, MaxScale);
+            app.PropertyChanged += (_, _) => Dispatcher.BeginInvoke(view.Refresh);
+            AddItem(view);
         }
         // Keep the running-apps order (Start first).
         _items.Sort((a, b) => a.IsStart ? -1 : b.IsStart ? 1 : apps.IndexOf(a.App!).CompareTo(apps.IndexOf(b.App!)));
-
-        foreach (var item in _items.Where(i => !Icons.Children.Contains(i)))
-        {
-            item.MouseLeftButtonDown += OnItemMouseDown;
-            item.MouseLeftButtonUp += OnItemMouseUp;
-            item.MouseRightButtonUp += OnItemRightClick;
-            Icons.Children.Add(item);
-        }
 
         _scales = _items.Select(i => oldScales.TryGetValue(i, out var s) ? s : 1.0).ToArray();
         _positions = CalculatePositions(_scales);
@@ -195,11 +205,8 @@ public partial class DockWindow : OverlayWindow
         return width;
     }
 
-    private void OnMouseMove(object sender, MouseEventArgs e)
-    {
-        // Like the design: cursor x relative to the body's left edge, minus its padding.
-        SetMouseX(e.GetPosition(Panel).X - Pad);
-    }
+    // Like the design: cursor x relative to the body's left edge, minus its padding.
+    private void OnMouseMove(object sender, MouseEventArgs e) => SetMouseX(e.GetPosition(Panel).X - Pad);
 
     private void SetMouseX(double? x)
     {
@@ -218,8 +225,9 @@ public partial class DockWindow : OverlayWindow
 
     private void OnFrame(object? sender, EventArgs e)
     {
-        // The design lerps a fixed fraction per 60 Hz frame; scale it to the real frame time.
-        double dt = Math.Min(0.1, _frameClock.Elapsed.TotalSeconds);
+        // The design lerps a fixed fraction per 60 Hz frame; scale it to the real frame time so
+        // it feels the same on any refresh rate and doesn't lurch after a slow frame.
+        double dt = Math.Min(0.05, _frameClock.Elapsed.TotalSeconds);
         _frameClock.Restart();
         double perFrame = _mouseX is not null ? 0.2 : 0.12;
         double k = 1 - Math.Pow(1 - perFrame, dt * 60);
@@ -248,23 +256,16 @@ public partial class DockWindow : OverlayWindow
     {
         double content = _items.Count > 0 ? ContentWidth(_scales, _positions) : 0;
         Panel.Width = content + 2 * Pad;
-        Panel.Height = PanelHeight;
-        Panel.Margin = new Thickness(0, 0, 0, _settings.BottomMargin);
         Icons.Width = content;
-        Icons.Height = IconDip;
-        Icons.Margin = new Thickness(0, 0, 0, _settings.BottomMargin + Pad);
 
         for (int i = 0; i < _items.Count; i++)
         {
             var item = _items[i];
-            double size = IconDip * _scales[i];
-            item.Width = item.Height = size;
-            Canvas.SetLeft(item, _positions[i] - size / 2);
-            Canvas.SetBottom(item, 0);
+            item.SetScale(_scales[i]);
+            Canvas.SetLeft(item, _positions[i] - IconDip / 2);
+            Canvas.SetLeft(item.Dot, _positions[i] - item.Dot.Width / 2);
             System.Windows.Controls.Panel.SetZIndex(item, (int)Math.Round(_scales[i] * 10));
-            item.ApplyScale(_scales[i], IconDip);
         }
-        UpdateBlur();
     }
 
     // ── Clicks ───────────────────────────────────────────────────────────────────────────────
@@ -299,63 +300,10 @@ public partial class DockWindow : OverlayWindow
         e.Handled = true;
     }
 
-    // ── Window plumbing: the blur layer follows the body ────────────────────────────────────
-
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-        if (_blur is not null)
-        {
-            _blur.EnsureHandle();
-            // Owned windows always stay above their owner: the dock can never end up under its blur.
-            SetWindowLongPtr(Handle, GWLP_HWNDPARENT, _blur.Handle);
-        }
-    }
-
-    public override void ApplyTheme(ThemeService theme)
-    {
-        // Per-pixel transparent window: no DWM material of its own; the blur window provides it.
-        _blur?.ApplyTheme(theme);
-    }
-
-    public override void SetBounds(RECT r)
-    {
-        _bounds = r;
-        base.SetBounds(r);
-        UpdateBlur();
-    }
-
-    private void OnVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
-    {
-        if (_blur is null)
-            return;
-        if (IsVisible)
-        {
-            UpdateBlur();
-            _blur.ShowPassive();
-        }
-        else
-        {
-            _blur.Hide();
-            SetMouseX(null);
-        }
-    }
-
-    private void UpdateBlur()
-    {
-        if (_blur is null || _bounds.Width <= 0 || double.IsNaN(Panel.Width))
-            return;
-        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
-        var r = PanelScreenRect;
-        // Inset 1px so the blur's (unantialiased) region edge hides under the body's border.
-        _blur.SetShape(new RECT(r.Left + 1, r.Top + 1, r.Right - 1, r.Bottom - 1), (int)Math.Round((Radius - 1) * dpi));
-    }
-
     protected override void OnClosed(EventArgs e)
     {
         CompositionTarget.Rendering -= OnFrame;
         _runningApps.Apps.CollectionChanged -= OnAppsChanged;
-        _blur?.Close();
         base.OnClosed(e);
     }
 }

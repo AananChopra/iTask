@@ -26,7 +26,6 @@ public sealed class ThemeService : IDisposable
     public bool IsDark { get; private set; }
 
     public BackdropKind TopBarBackdrop => _appearance.TopBarBackdrop;
-    public BackdropKind DockBackdrop => _appearance.DockBackdrop;
 
     /// <summary>Base surface color for the current theme (also used behind solid surfaces).</summary>
     public Color Surface => IsDark ? Color.FromRgb(0x1C, 0x1C, 0x1C) : Color.FromRgb(0xF3, 0xF3, 0xF3);
@@ -65,13 +64,9 @@ public sealed class ThemeService : IDisposable
         res["TextSecondaryBrush"] = Brush(ink, IsDark ? 0.65 : 0.60);
         res["ItemHoverBrush"] = Brush(ink, IsDark ? 0.09 : 0.06);
         res["ItemPressedBrush"] = Brush(ink, IsDark ? 0.05 : 0.04);
-        // Dock, from the macOS dock design: rgba(45,45,45,.75) body, rgba(255,255,255,.15) border,
-        // 1px inset highlight on top / lowlight at the bottom, white .8 running dots.
-        double dockAlpha = DockBackdrop == BackdropKind.Solid ? 1.0 : Clamp(_appearance.DockOpacity);
-        res["DockPanelBrush"] = Brush(IsDark ? Color.FromRgb(45, 45, 45) : Color.FromRgb(246, 246, 246), dockAlpha);
-        res["DockBorderBrush"] = Brush(IsDark ? Colors.White : Colors.Black, IsDark ? 0.15 : 0.10);
-        res["DockHighlightBrush"] = Brush(Colors.White, IsDark ? 0.15 : 0.55);
-        res["DockLowlightBrush"] = Brush(Colors.Black, IsDark ? 0.20 : 0.06);
+        // Dock, from the macOS dock design: rgba(45,45,45) body, faint hairline border, white .8 dots.
+        res["DockPanelBrush"] = Brush(IsDark ? Color.FromRgb(45, 45, 45) : Color.FromRgb(246, 246, 246), Clamp(_appearance.DockOpacity));
+        res["DockBorderBrush"] = Brush(IsDark ? Colors.White : Colors.Black, IsDark ? 0.10 : 0.08);
         res["DockDotBrush"] = Brush(IsDark ? Colors.White : Colors.Black, IsDark ? 0.8 : 0.65);
         res["TopBarTintBrush"] = Brush(surface, TopBarBackdrop == BackdropKind.Solid ? 1.0 : Clamp(_appearance.TopBarOpacity));
         res["MenuBackgroundBrush"] = Brush(IsDark ? Color.FromRgb(0x2C, 0x2C, 0x2C) : Color.FromRgb(0xF9, 0xF9, 0xF9), 1.0);

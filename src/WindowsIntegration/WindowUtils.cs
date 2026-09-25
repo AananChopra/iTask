@@ -28,6 +28,31 @@ public static class WindowUtils
         return IntPtr.Zero;
     }
 
+    /// <summary>
+    /// If one of Explorer's taskbars (primary or secondary) is docked along the top of this display,
+    /// its rectangle. It keeps that strip reserved even while we hide it.
+    /// </summary>
+    public static RECT? FindExplorerTaskbarAtTop(MonitorInfo monitor)
+    {
+        var m = monitor.Bounds;
+        int self = Environment.ProcessId;
+        foreach (var cls in new[] { "Shell_TrayWnd", "Shell_SecondaryTrayWnd" })
+        {
+            var hwnd = IntPtr.Zero;
+            while ((hwnd = FindWindowEx(IntPtr.Zero, hwnd, cls, null)) != IntPtr.Zero)
+            {
+                GetWindowThreadProcessId(hwnd, out uint pid);
+                if (pid == self || !GetWindowRect(hwnd, out var r))
+                    continue;
+                bool spansWidth = r.Left <= m.Left + 2 && r.Right >= m.Right - 2;
+                bool atTop = r.Top <= m.Top + 2 && r.Bottom > m.Top && r.Height < m.Height / 4;
+                if (spansWidth && atTop)
+                    return r;
+            }
+        }
+        return null;
+    }
+
     public static bool IsOwnWindow(IntPtr hwnd)
     {
         GetWindowThreadProcessId(hwnd, out uint pid);
