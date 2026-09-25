@@ -40,6 +40,20 @@ public class OverlayWindow : Window
 
     private BackdropKind _backdrop;
     private bool _cloaked;
+    private bool _useGlass;
+
+    /// <summary>The frosted-glass window under this surface, when it has one.</summary>
+    protected GlassWindow? Glass { get; private set; }
+
+    /// <summary>
+    /// Puts frosted glass behind this surface. Call from the constructor: the surface becomes
+    /// per-pixel transparent and paints its tint and content over a separate glass window.
+    /// </summary>
+    protected void UseGlass()
+    {
+        _useGlass = true;
+        AllowsTransparency = true;
+    }
 
     /// <summary>Creates the HWND without showing the window, so it can be positioned first.</summary>
     public void EnsureHandle() => new WindowInteropHelper(this).EnsureHandle();
@@ -59,6 +73,39 @@ public class OverlayWindow : Window
         // Stay cloaked (shown to Windows, invisible to the eye) until the first frame is on screen,
         // so startup never flashes an empty or half-painted bar.
         SetCloaked(true);
+
+        if (_useGlass)
+        {
+            Glass = new GlassWindow(Title + " Glass");
+            Glass.EnsureHandle();
+            // Owned windows always stay above their owner: the content can never slip under its glass.
+            SetWindowLongPtr(Handle, GWLP_HWNDPARENT, Glass.Handle);
+            IsVisibleChanged += (_, _) =>
+            {
+                if (IsVisible)
+                {
+                    UpdateGlass();
+                    Glass.ShowPassive();
+                }
+                else
+                {
+                    Glass.Hide();
+                }
+            };
+        }
+    }
+
+    /// <summary>Positions the glass under the surface. By default it covers the whole window.</summary>
+    protected virtual void UpdateGlass()
+    {
+        if (Glass is not null && _bounds is { } b)
+            Glass.SetShape(b, 0);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        Glass?.Close();
+        base.OnClosed(e);
     }
 
     protected override void OnContentRendered(EventArgs e)
@@ -81,6 +128,12 @@ public class OverlayWindow : Window
     {
         if (Source is null)
             return;
+        if (AllowsTransparency)
+        {
+            // Per-pixel transparent surface: no DWM material of its own; its glass (if any) blurs.
+            Glass?.ApplyTheme(theme);
+            return;
+        }
         _backdrop = GetBackdrop(theme);
         Backdrop.Apply(Source, _backdrop, theme.IsDark, Corners, theme.Surface);
         if (_backdrop == BackdropKind.Acrylic)
@@ -98,6 +151,7 @@ public class OverlayWindow : Window
     {
         _bounds = r;
         SetWindowPos(Handle, HWND_TOPMOST, r.Left, r.Top, r.Width, r.Height, SWP_NOACTIVATE);
+        UpdateGlass();
     }
 
     /// <summary>Shows without activating (SW_SHOWNOACTIVATE) — never steals focus.</summary>

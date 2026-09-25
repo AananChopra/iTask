@@ -12,9 +12,11 @@ public partial class TopBarWindow : OverlayWindow
 {
     private readonly ShellServices _services;
 
-    public TopBarWindow(TopBarSettings settings, ShellServices services)
+    public TopBarWindow(TopBarSettings settings, ShellServices services, bool glass)
     {
         _services = services;
+        if (glass)
+            UseGlass();
         InitializeComponent();
         DataContext = services;
         BarContent.Height = settings.Height;

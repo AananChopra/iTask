@@ -66,7 +66,13 @@ public sealed class ThemeService : IDisposable
         res["ItemPressedBrush"] = Brush(ink, IsDark ? 0.05 : 0.04);
         // Dock, from the macOS dock design: rgba(45,45,45) body, faint hairline border, white .8 dots.
         res["DockPanelBrush"] = Brush(IsDark ? Color.FromRgb(45, 45, 45) : Color.FromRgb(246, 246, 246), Clamp(_appearance.DockOpacity));
-        res["DockBorderBrush"] = Brush(IsDark ? Colors.White : Colors.Black, IsDark ? 0.10 : 0.08);
+        res["DockBorderBrush"] = Brush(IsDark ? Colors.White : Colors.Black, IsDark ? 0.16 : 0.10);
+        // Glass sheen: light falling on the top of the body, fading out by the middle.
+        var sheen = new LinearGradientBrush(
+            Color.FromArgb((byte)(IsDark ? 26 : 90), 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 90)
+        { EndPoint = new System.Windows.Point(0, 0.6) };
+        sheen.Freeze();
+        res["DockSheenBrush"] = sheen;
         res["DockDotBrush"] = Brush(IsDark ? Colors.White : Colors.Black, IsDark ? 0.8 : 0.65);
         res["TopBarTintBrush"] = Brush(surface, TopBarBackdrop == BackdropKind.Solid ? 1.0 : Clamp(_appearance.TopBarOpacity));
         res["MenuBackgroundBrush"] = Brush(IsDark ? Color.FromRgb(0x2C, 0x2C, 0x2C) : Color.FromRgb(0xF9, 0xF9, 0xF9), 1.0);

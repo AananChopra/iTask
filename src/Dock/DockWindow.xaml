@@ -8,12 +8,11 @@
          underneath, so the headroom that magnified icons grow into doesn't block anything. -->
     <Grid x:Name="Root">
 
-        <!-- Dock body: translucent rounded panel with a faint hairline border and a soft shadow -->
+        <!-- Dock body: tinted glass (the blur itself is DockGlassWindow, underneath), a soft sheen on
+             top and a hairline border. No drop shadow: it would show through the translucent body. -->
         <Border x:Name="Panel" HorizontalAlignment="Center" VerticalAlignment="Bottom"
                 Background="{DynamicResource DockPanelBrush}" BorderBrush="{DynamicResource DockBorderBrush}" BorderThickness="1">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.3" Color="Black" RenderingBias="Performance" />
-            </Border.Effect>
+            <Border x:Name="Sheen" Background="{DynamicResource DockSheenBrush}" />
         </Border>
 
         <!-- Icons: a sibling of the body (not a child) so they don't inherit its shadow and can rise above it -->

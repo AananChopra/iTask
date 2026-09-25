@@ -29,8 +29,8 @@ public sealed class MonitorShell : IDisposable
         Monitor = monitor;
         _settings = settings;
         _services = services;
-        _topBar = new TopBarWindow(settings.TopBar, services);
-        _dock = new DockWindow(settings.Dock, services.RunningApps);
+        _topBar = new TopBarWindow(settings.TopBar, services, glass: settings.Appearance.TopBarBackdrop == BackdropKind.Blur);
+        _dock = new DockWindow(settings.Dock, services.RunningApps, settings.Appearance.DockGlass);
         _dock.ContentChanged += (_, _) => RequestLayout();
         _dockAutoHide = new DockAutoHide(_dock, services.Foreground, monitor);
     }
@@ -104,10 +104,12 @@ public sealed class MonitorShell : IDisposable
         var nativeTaskbar = _settings.Shell.HideNativeTaskbar ? WindowUtils.FindExplorerTaskbarAtTop(m) : null;
         if (nativeTaskbar is { } tb)
         {
-            // The (hidden) Windows taskbar is docked at the top and keeps its strip reserved. Occupy
-            // that strip rather than stacking below it: maximized windows start right under the bar,
-            // and Windows' own flyouts (volume, Wi-Fi…), which anchor to the taskbar, open flush under
-            // it. Stay registered with zero thickness so full-screen notifications keep arriving.
+            // The (hidden) Windows taskbar is docked at the top, and Explorer enforces its full strip
+            // there (auto-hide doesn't release it, and it resets any work-area change within a
+            // second). So occupy that strip rather than stacking below it: maximized windows start
+            // right under the bar, and Windows' flyouts, which anchor to the taskbar, open flush
+            // under it. Our app bar stays registered with zero thickness so full-screen
+            // notifications keep arriving.
             _topAppBar?.Reserve(m.Bounds, 0);
             topRect = new RECT(m.Bounds.Left, m.Bounds.Top, m.Bounds.Right, Math.Max(m.Bounds.Top + topHeight, tb.Bottom));
         }

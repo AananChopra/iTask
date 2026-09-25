@@ -37,13 +37,17 @@ public partial class DockWindow : OverlayWindow
     private RECT _bounds;
     private DockItemView? _pressed;
 
-    public DockWindow(DockSettings settings, RunningAppsService runningApps)
+    public DockWindow(DockSettings settings, RunningAppsService runningApps, bool glass)
     {
         _settings = settings;
         _runningApps = runningApps;
         InitializeComponent();
 
+        if (glass)
+            UseGlass();
+
         Panel.CornerRadius = new CornerRadius(Radius);
+        Sheen.CornerRadius = new CornerRadius(Math.Max(0, Radius - 1));
         Panel.Height = PanelHeight;
         Panel.Margin = new Thickness(0, 0, 0, _settings.BottomMargin);
         Icons.Height = IconDip;
@@ -110,8 +114,14 @@ public partial class DockWindow : OverlayWindow
         base.SetBounds(r);
     }
 
-    // Per-pixel transparent window: it has no DWM material of its own.
-    public override void ApplyTheme(ThemeService theme) { }
+    /// <summary>The glass follows the body (not the whole window), including while it widens.</summary>
+    protected override void UpdateGlass()
+    {
+        if (Glass is null || _bounds.Width <= 0 || double.IsNaN(Panel.Width))
+            return;
+        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        Glass.SetShape(PanelScreenRect, (float)(Radius * dpi));
+    }
 
     // ── Items ────────────────────────────────────────────────────────────────────────────────
 
@@ -242,14 +252,35 @@ public partial class DockWindow : OverlayWindow
             if (Math.Abs(_scales[i] - targetScales[i]) > 0.002 || Math.Abs(_positions[i] - targetPositions[i]) > 0.1)
                 settled = false;
         }
+        if (PerfLogging)
+            _frameTimes.Add(dt * 1000);
         if (settled)
         {
             Array.Copy(targetScales, _scales, _scales.Length);
             Array.Copy(targetPositions, _positions, _positions.Length);
             CompositionTarget.Rendering -= OnFrame;
             _animating = false;
+            LogFrameStats();
         }
         ApplyFrame();
+    }
+
+    // Set ITASK_PERF=1 to log animation frame timing (for tuning smoothness).
+    private static readonly bool PerfLogging = Environment.GetEnvironmentVariable("ITASK_PERF") == "1";
+    private readonly List<double> _frameTimes = new();
+
+    private void LogFrameStats()
+    {
+        if (!PerfLogging || _frameTimes.Count < 10)
+        {
+            _frameTimes.Clear();
+            return;
+        }
+        var sorted = _frameTimes.Skip(1).OrderBy(t => t).ToList(); // first frame measures idle time
+        double avg = sorted.Average(), p95 = sorted[(int)(sorted.Count * 0.95)], max = sorted[^1];
+        int slow = sorted.Count(t => t > 25);
+        iTask.Utilities.Log.Info($"Dock perf: {sorted.Count} frames, avg {avg:0.0} ms ({1000 / avg:0} fps), p95 {p95:0.0} ms, max {max:0.0} ms, >25ms: {slow}");
+        _frameTimes.Clear();
     }
 
     private void ApplyFrame()
@@ -266,6 +297,7 @@ public partial class DockWindow : OverlayWindow
             Canvas.SetLeft(item.Dot, _positions[i] - item.Dot.Width / 2);
             System.Windows.Controls.Panel.SetZIndex(item, (int)Math.Round(_scales[i] * 10));
         }
+        UpdateGlass();
     }
 
     // ── Clicks ───────────────────────────────────────────────────────────────────────────────

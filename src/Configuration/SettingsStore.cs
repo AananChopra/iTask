@@ -58,6 +58,16 @@ public static class SettingsStore
             s.Dock.MagnificationRange = d.MagnificationRange;
             s.Appearance.DockOpacity = new AppearanceSettings().DockOpacity;
         }
+        if (s.SettingsVersion < 4)
+        {
+            // v4: frosted glass on both bars, thinner top bar.
+            var a = new AppearanceSettings();
+            s.Appearance.TopBarBackdrop = a.TopBarBackdrop;
+            s.Appearance.DockGlass = a.DockGlass;
+            s.Appearance.DockOpacity = a.DockOpacity;
+            s.Appearance.TopBarOpacity = a.TopBarOpacity;
+            s.TopBar.Height = new TopBarSettings().Height;
+        }
         s.SettingsVersion = AppSettings.CurrentVersion;
     }
 

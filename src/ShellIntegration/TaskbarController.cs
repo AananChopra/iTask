@@ -34,18 +34,29 @@ public sealed class TaskbarController : IDisposable
 
     public bool IsActive => _active;
 
-    public void Hide()
+    private bool _captured;
+
+    /// <summary>
+    /// Records (and persists, for crash recovery) the taskbar's original state. Must run before the
+    /// tray host starts: afterwards ABM_GETSTATE is answered by the tray host, not Explorer.
+    /// </summary>
+    public void CaptureOriginalState()
     {
         if (WindowUtils.FindExplorerTaskbar() == IntPtr.Zero)
-        {
             Log.Warn("Shell_TrayWnd not found (Explorer not running?). Will retry on TaskbarCreated.");
-        }
 
         // If a previous session died without restoring, the file holds the true original state.
         var previous = LoadRecoveryState();
         _originalState = previous?.OriginalState ?? GetState();
         SaveRecoveryState(new RecoveryState(_originalState));
+        _captured = true;
+    }
 
+    /// <summary>Hides the taskbar. Call once iTask's own bars are on screen, so nothing flashes in between.</summary>
+    public void Hide()
+    {
+        if (!_captured)
+            CaptureOriginalState();
         _active = true;
         Apply();
         Log.Info($"Native taskbar hidden (original state=0x{_originalState:X}).");

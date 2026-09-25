@@ -20,7 +20,7 @@ public enum DockVisibility
 
 public sealed class AppSettings
 {
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     /// <summary>Schema version of the saved file (0 = written before versioning existed).</summary>
     public int SettingsVersion { get; set; }
@@ -34,7 +34,7 @@ public sealed class AppSettings
 public sealed class TopBarSettings
 {
     /// <summary>Height in device-independent pixels.</summary>
-    public double Height { get; set; } = 30;
+    public double Height { get; set; } = 28;
     /// <summary>Show icons of open apps at the left of the top bar.</summary>
     public bool ShowRunningApps { get; set; } = true;
     /// <summary>Offer other apps' notification-area (tray) icons in a dropdown on the right.</summary>
@@ -76,14 +76,16 @@ public sealed class PinnedApp
 public sealed class AppearanceSettings
 {
     /// <summary>
-    /// Top bar material. Solid by default: Windows' system acrylic follows window activation and our
-    /// bars are never activated, so it cross-fades to grey and back whenever you switch apps.
+    /// Top bar material. "Blur" is frosted glass that ignores window activation; avoid "Acrylic"
+    /// (Windows' system acrylic follows activation, and our bars never activate, so it flickers).
     /// </summary>
-    public BackdropKind TopBarBackdrop { get; set; } = BackdropKind.Solid;
-    /// <summary>Opacity (0–1) of the dock body; 1 = solid.</summary>
-    public double DockOpacity { get; set; } = 0.85;
-    /// <summary>Opacity (0–1) of the tint layered over the top bar backdrop.</summary>
-    public double TopBarOpacity { get; set; } = 0.15;
+    public BackdropKind TopBarBackdrop { get; set; } = BackdropKind.Blur;
+    /// <summary>Frosted-glass blur behind the dock body.</summary>
+    public bool DockGlass { get; set; } = true;
+    /// <summary>Opacity (0–1) of the dock body's tint over the glass; 1 = solid.</summary>
+    public double DockOpacity { get; set; } = 0.5;
+    /// <summary>Opacity (0–1) of the tint over the top bar glass.</summary>
+    public double TopBarOpacity { get; set; } = 0.45;
 }
 
 public sealed class ShellSettings

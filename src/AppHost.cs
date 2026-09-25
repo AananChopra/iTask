@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Threading;
 using iTask.Configuration;
 using iTask.ShellIntegration;
@@ -42,9 +43,9 @@ public sealed class AppHost : IDisposable
 
         _explorerTaskbar = WindowUtils.FindExplorerTaskbar();
         if (_settings.Shell.HideNativeTaskbar)
-            _taskbar.Hide();
+            _taskbar.CaptureOriginalState();
 
-        // After hiding Explorer's taskbar: the tray host registers its own Shell_TrayWnd.
+        // After capturing the taskbar's state: the tray host registers its own Shell_TrayWnd.
         TrayHost? tray = null;
         if (_settings.TopBar.ShowTrayIcons)
         {
@@ -63,6 +64,15 @@ public sealed class AppHost : IDisposable
             tray);
 
         SyncMonitors();
+
+        // Hide the Windows taskbar only once our bars have drawn their first frame (they appear
+        // over it, as topmost windows), so there's never a moment of bare desktop in between.
+        if (_settings.Shell.HideNativeTaskbar)
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
+            {
+                if (!_disposed)
+                    _taskbar.Hide();
+            });
         Log.Info("iTask started.");
     }
 

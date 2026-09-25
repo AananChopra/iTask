@@ -301,6 +301,7 @@ internal static class NativeMethods
 
     // ── DWM ──────────────────────────────────────────────────────────────────
     public const int DWMWA_CLOAK = 13;
+    public const int DWMWA_USE_HOSTBACKDROPBRUSH = 17;
     public const int DWMWA_CLOAKED = 14;
 
     [DllImport("dwmapi.dll")]
@@ -331,28 +332,5 @@ internal static class NativeMethods
     [DllImport("dwmapi.dll")]
     public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
 
-    // Undocumented but long-stable accent API; used only as the "Blur" backdrop fallback.
-    public const int WCA_ACCENT_POLICY = 19;
-    public const int ACCENT_DISABLED = 0;
-    public const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct AccentPolicy
-    {
-        public int AccentState;
-        public int AccentFlags;
-        public uint GradientColor; // AABBGGRR
-        public int AnimationId;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct WindowCompositionAttributeData
-    {
-        public int Attribute;
-        public IntPtr Data;
-        public int SizeOfData;
-    }
-
-    [DllImport("user32.dll")]
-    public static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+    public const int GWLP_HWNDPARENT = -8; // a top-level window's owner
 }
