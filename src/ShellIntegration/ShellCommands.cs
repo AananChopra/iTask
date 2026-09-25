@@ -9,8 +9,6 @@ public static class ShellCommands
 {
     public static void OpenStartMenu() => InputSender.SendChord(InputSender.VK_LWIN);
 
-    /// <summary>Win+A: Quick Settings (Wi-Fi, volume slider, battery saver…).</summary>
-    public static void OpenQuickSettings() => InputSender.SendChord(InputSender.VK_LWIN, InputSender.VK_A);
 
     public static void OpenTaskManager() => Launch("taskmgr.exe");
 

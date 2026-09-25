@@ -9,6 +9,8 @@ namespace iTask.SystemInfo;
 /// Master volume and mute of the default playback device (Core Audio). Change callbacks keep it
 /// current — including volume keys, other apps, and switching the default device.
 /// </summary>
+public sealed record AudioDevice(string Id, string Name, bool IsDefault);
+
 public sealed class AudioService : INotifyPropertyChanged, IDisposable
 {
     private static readonly Guid IID_IAudioEndpointVolume = new("5CDF2C82-841E-4546-9722-0CF74078229A");
@@ -44,7 +46,104 @@ public sealed class AudioService : INotifyPropertyChanged, IDisposable
 
     public string Description => !HasDevice ? "No audio output" : IsMuted ? "Muted" : $"Volume {Volume}%";
 
+    /// <summary>Active playback devices; the default one is flagged.</summary>
+    public IReadOnlyList<AudioDevice> Devices { get; private set; } = Array.Empty<AudioDevice>();
+
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>Sets the master volume (0–100); unmutes when raising it from zero-ish.</summary>
+    public void SetVolume(int percent)
+    {
+        if (_endpoint is null)
+            return;
+        float level = Math.Clamp(percent / 100f, 0f, 1f);
+        _endpoint.SetMasterVolumeLevelScalar(level, ref _eventContext);
+        if (IsMuted && percent > 0)
+            _endpoint.SetMute(false, ref _eventContext);
+        ReadCurrent();
+    }
+
+    /// <summary>Makes <paramref name="deviceId"/> the default output for all roles.</summary>
+    public void SetDefaultDevice(string deviceId)
+    {
+        try
+        {
+            var policy = (IPolicyConfig)new PolicyConfigClient();
+            try
+            {
+                foreach (var role in new[] { ERole.eConsole, ERole.eMultimedia, ERole.eCommunications })
+                    Marshal.ThrowExceptionForHR(policy.SetDefaultEndpoint(deviceId, role));
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(policy);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Could not change the default audio device", ex);
+        }
+    }
+
+    private void RefreshDevices()
+    {
+        var devices = new List<AudioDevice>();
+        if (_enumerator is not null)
+        {
+            try
+            {
+                string? defaultId = null;
+                if (_enumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out var def) == 0 && def is not null)
+                {
+                    def.GetId(out defaultId);
+                    Marshal.ReleaseComObject(def);
+                }
+                if (_enumerator.EnumAudioEndpoints(EDataFlow.eRender, 1 /* DEVICE_STATE_ACTIVE */, out var collection) == 0)
+                {
+                    collection.GetCount(out uint count);
+                    for (uint i = 0; i < count; i++)
+                    {
+                        if (collection.Item(i, out var device) != 0 || device is null)
+                            continue;
+                        device.GetId(out string id);
+                        devices.Add(new AudioDevice(id, FriendlyName(device) ?? "Audio device", id == defaultId));
+                        Marshal.ReleaseComObject(device);
+                    }
+                    Marshal.ReleaseComObject(collection);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not list audio devices", ex);
+            }
+        }
+        Devices = devices;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Devices)));
+    }
+
+    private static string? FriendlyName(IMMDevice device)
+    {
+        if (device.OpenPropertyStore(0 /* STGM_READ */, out var store) != 0 || store is null)
+            return null;
+        try
+        {
+            var key = PropertyKeys.DeviceFriendlyName;
+            if (store.GetValue(ref key, out var value) != 0)
+                return null;
+            try
+            {
+                return value.vt == PropVariant.VT_LPWSTR ? Marshal.PtrToStringUni(value.pointer) : null;
+            }
+            finally
+            {
+                PropertyKeys.PropVariantClear(ref value);
+            }
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(store);
+        }
+    }
 
     /// <summary>Nudges volume by <paramref name="delta"/> percentage points (e.g. from the scroll wheel).</summary>
     public void Adjust(int delta)
@@ -69,6 +168,7 @@ public sealed class AudioService : INotifyPropertyChanged, IDisposable
     private void AttachDefaultDevice()
     {
         DetachEndpoint();
+        RefreshDevices();
         if (_enumerator is null)
         {
             Publish(false, 0, false);
@@ -134,6 +234,8 @@ public sealed class AudioService : INotifyPropertyChanged, IDisposable
 
     private void OnDefaultDeviceChanged() => _dispatcher.BeginInvoke(AttachDefaultDevice);
 
+    private void OnDevicesChanged() => _dispatcher.BeginInvoke(RefreshDevices);
+
     public void Dispose()
     {
         DetachEndpoint();
@@ -169,9 +271,9 @@ public sealed class AudioService : INotifyPropertyChanged, IDisposable
                 _owner.OnDefaultDeviceChanged();
         }
 
-        public void OnDeviceStateChanged(string deviceId, uint newState) { }
-        public void OnDeviceAdded(string deviceId) { }
-        public void OnDeviceRemoved(string deviceId) { }
+        public void OnDeviceStateChanged(string deviceId, uint newState) => _owner.OnDevicesChanged();
+        public void OnDeviceAdded(string deviceId) => _owner.OnDevicesChanged();
+        public void OnDeviceRemoved(string deviceId) => _owner.OnDevicesChanged();
         public void OnPropertyValueChanged(string deviceId, PropertyKey key) { }
     }
 }

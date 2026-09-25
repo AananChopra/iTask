@@ -1,5 +1,6 @@
 using iTask.ShellIntegration;
 using iTask.SystemInfo;
+using iTask.TopBar.Flyouts;
 using iTask.WindowsIntegration;
 
 namespace iTask.UI;
@@ -11,6 +12,8 @@ public sealed record ShellServices(
     BatteryService Battery,
     AudioService Audio,
     NetworkService Network,
+    WifiService Wifi,
     ForegroundWatcher Foreground,
     RunningAppsService RunningApps,
+    FlyoutHost Flyouts,
     TrayHost? Tray);

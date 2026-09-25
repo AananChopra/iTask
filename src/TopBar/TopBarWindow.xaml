@@ -86,20 +86,20 @@
                     </Border>
                 </Popup>
 
-                <Button x:Name="NetworkButton" Style="{StaticResource BarButtonStyle}" Click="QuickSettings_Click"
+                <Button x:Name="NetworkButton" Style="{StaticResource BarButtonStyle}" Click="NetworkButton_Click"
                         DataContext="{Binding Network}" ToolTip="{Binding Description}">
                     <local:NetworkIcon Bars="{Binding SignalBars}" IsConnected="{Binding IsConnected}"
                                        IsWired="{Binding IsWired}" HasInternet="{Binding HasInternet}" />
                 </Button>
 
-                <Button x:Name="VolumeButton" Style="{StaticResource BarButtonStyle}" Click="QuickSettings_Click"
+                <Button x:Name="VolumeButton" Style="{StaticResource BarButtonStyle}" Click="VolumeButton_Click"
                         MouseWheel="VolumeButton_MouseWheel"
                         DataContext="{Binding Audio}" ToolTip="{Binding Description}"
                         Visibility="{Binding HasDevice, Converter={StaticResource BoolToVisibility}}">
                     <local:VolumeIcon Level="{Binding Volume}" IsMuted="{Binding IsMuted}" />
                 </Button>
 
-                <Button x:Name="BatteryButton" Style="{StaticResource BarButtonStyle}" Click="QuickSettings_Click"
+                <Button x:Name="BatteryButton" Style="{StaticResource BarButtonStyle}" Click="BatteryButton_Click"
                         DataContext="{Binding Battery}" ToolTip="{Binding Description}"
                         Visibility="{Binding HasBattery, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel Orientation="Horizontal">

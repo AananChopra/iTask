@@ -3,6 +3,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using iTask.Configuration;
 using iTask.ShellIntegration;
+using iTask.TopBar.Flyouts;
 using iTask.UI;
 using iTask.WindowsIntegration;
 
@@ -57,7 +58,24 @@ public partial class TopBarWindow : OverlayWindow
         AppMenu.IsOpen = true;
     }
 
-    private void QuickSettings_Click(object sender, RoutedEventArgs e) => ShellCommands.OpenQuickSettings();
+    // ── Status menus (our own macOS-style dropdowns, opening from the bar) ───────────────────
+
+    private void NetworkButton_Click(object sender, RoutedEventArgs e) =>
+        ToggleMenu("wifi", NetworkButton, () => new WifiFlyout(_services.Wifi, _services.Network), 290);
+
+    private void VolumeButton_Click(object sender, RoutedEventArgs e) =>
+        ToggleMenu("sound", VolumeButton, () => new SoundFlyout(_services.Audio), 280);
+
+    private void BatteryButton_Click(object sender, RoutedEventArgs e) =>
+        ToggleMenu("battery", BatteryButton, () => new BatteryFlyout(_services.Battery), 250);
+
+    private void ToggleMenu(string key, FrameworkElement anchor, Func<FrameworkElement> content, double width)
+    {
+        TrayPopup.IsOpen = false;
+        NativeMethods.GetWindowRect(Handle, out var bar);
+        // Keyed per bar, so the same menu on another display opens there instead of toggling closed.
+        _services.Flyouts.Toggle((this, key), anchor, bar.Bottom, content, width);
+    }
 
     // The dropdown can't use StaysOpen=False: that relies on the owner window being active, and ours
     // never is. It closes on: the chevron again, any other click on the bar, or a foreground change

@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using iTask.Configuration;
 using iTask.ShellIntegration;
 using iTask.SystemInfo;
+using iTask.TopBar.Flyouts;
 using iTask.UI;
 using iTask.Utilities;
 using iTask.WindowsIntegration;
@@ -53,14 +54,18 @@ public sealed class AppHost : IDisposable
             catch (Exception ex) { Log.Error("Tray host failed to start", ex); }
         }
 
+        var theme = Track(new ThemeService(_settings.Appearance));
+        var foreground = Track(new ForegroundWatcher());
         _services = new ShellServices(
-            Track(new ThemeService(_settings.Appearance)),
+            theme,
             Track(new ClockService()),
             Track(new BatteryService()),
             Track(new AudioService()),
             Track(new NetworkService()),
-            Track(new ForegroundWatcher()),
+            Track(new WifiService()),
+            foreground,
             Track(new RunningAppsService()),
+            Track(new FlyoutHost(theme, foreground)),
             tray);
 
         SyncMonitors();

@@ -15,10 +15,10 @@ namespace iTask.Dock;
 /// </summary>
 public sealed class DockAutoHide : IDisposable
 {
-    private static readonly TimeSpan RevealDwell = TimeSpan.FromMilliseconds(120);
-    private static readonly TimeSpan HideDelay = TimeSpan.FromMilliseconds(600);
-    private const double SlideInMs = 240;
-    private const double SlideOutMs = 200;
+    private static readonly TimeSpan RevealDwell = TimeSpan.FromMilliseconds(60);
+    private static readonly TimeSpan HideDelay = TimeSpan.FromMilliseconds(450);
+    private const double SlideInMs = 190;
+    private const double SlideOutMs = 170;
     private const int EdgeTolerancePx = 2;
 
     private readonly DockWindow _dock;
@@ -44,7 +44,8 @@ public sealed class DockAutoHide : IDisposable
         _dock = dock;
         _foreground = foreground;
         _monitor = monitor;
-        _cursorTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(50) };
+        // Only runs while the dock is auto-hidden or revealed; GetCursorPos is cheap.
+        _cursorTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(16) };
         _cursorTimer.Tick += (_, _) => SampleCursor();
         _foreground.Changed += OnForegroundChanged;
     }

@@ -26,6 +26,7 @@ public sealed class ThemeService : IDisposable
     public bool IsDark { get; private set; }
 
     public BackdropKind TopBarBackdrop => _appearance.TopBarBackdrop;
+    public double DockOpacity => _appearance.DockOpacity;
 
     /// <summary>Base surface color for the current theme (also used behind solid surfaces).</summary>
     public Color Surface => IsDark ? Color.FromRgb(0x1C, 0x1C, 0x1C) : Color.FromRgb(0xF3, 0xF3, 0xF3);
@@ -74,6 +75,11 @@ public sealed class ThemeService : IDisposable
         sheen.Freeze();
         res["DockSheenBrush"] = sheen;
         res["DockDotBrush"] = Brush(IsDark ? Colors.White : Colors.Black, IsDark ? 0.8 : 0.65);
+
+        // Flyout controls (macOS system blue for switches and slider fill).
+        res["AccentFillBrush"] = Brush(IsDark ? Color.FromRgb(0x0A, 0x84, 0xFF) : Color.FromRgb(0x00, 0x7A, 0xFF), 1.0);
+        res["SliderTrackBrush"] = Brush(ink, IsDark ? 0.18 : 0.12);
+        res["SwitchOffBrush"] = Brush(ink, IsDark ? 0.22 : 0.16);
         res["TopBarTintBrush"] = Brush(surface, TopBarBackdrop == BackdropKind.Solid ? 1.0 : Clamp(_appearance.TopBarOpacity));
         res["MenuBackgroundBrush"] = Brush(IsDark ? Color.FromRgb(0x2C, 0x2C, 0x2C) : Color.FromRgb(0xF9, 0xF9, 0xF9), 1.0);
         res["MenuBorderBrush"] = Brush(Colors.Black, IsDark ? 0.45 : 0.10);

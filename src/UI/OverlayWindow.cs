@@ -95,11 +95,22 @@ public class OverlayWindow : Window
         }
     }
 
+    /// <summary>Tint/border/sheen the glass draws over its blur (null = plain blur, tint drawn by WPF).</summary>
+    protected virtual GlassStyle? GetGlassStyle(ThemeService theme) => null;
+
+    /// <summary>Records bounds applied externally (e.g. a batched move), for DPI-change restoration.</summary>
+    public void NoteBounds(RECT r) => _bounds = r;
+
+    /// <summary>Corner radius of the glass (DIPs) when it covers the whole window.</summary>
+    protected virtual double GlassCornerRadius => 0;
+
     /// <summary>Positions the glass under the surface. By default it covers the whole window.</summary>
     protected virtual void UpdateGlass()
     {
-        if (Glass is not null && _bounds is { } b)
-            Glass.SetShape(b, 0);
+        if (Glass is null || _bounds is not { } b)
+            return;
+        float dpi = (float)VisualTreeHelper.GetDpi(this).DpiScaleX;
+        Glass.SetShape(b, (float)GlassCornerRadius * dpi, dpi);
     }
 
     protected override void OnClosed(EventArgs e)
@@ -131,7 +142,11 @@ public class OverlayWindow : Window
         if (AllowsTransparency)
         {
             // Per-pixel transparent surface: no DWM material of its own; its glass (if any) blurs.
-            Glass?.ApplyTheme(theme);
+            if (Glass is not null)
+            {
+                Glass.GlassLook = GetGlassStyle(theme);
+                Glass.ApplyTheme(theme);
+            }
             return;
         }
         _backdrop = GetBackdrop(theme);

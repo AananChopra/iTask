@@ -7,7 +7,6 @@ namespace iTask.WindowsIntegration;
 public static class InputSender
 {
     public const ushort VK_LWIN = 0x5B;
-    public const ushort VK_A = 0x41;
     public const ushort VK_MENU = 0x12; // Alt
 
     private static bool IsExtended(ushort vk) => vk is VK_LWIN or 0x5C /* RWIN */ or 0x5D /* APPS */;

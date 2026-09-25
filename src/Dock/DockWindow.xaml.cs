@@ -24,6 +24,8 @@ namespace iTask.Dock;
 public partial class DockWindow : OverlayWindow
 {
     private const double SideMargin = 20; // room for the body's shadow
+    private const double HoverTimeConstant = 0.045; // s — how quickly icons follow the cursor
+    private const double LeaveTimeConstant = 0.080; // s — how quickly they settle back
 
     private readonly DockSettings _settings;
     private readonly RunningAppsService _runningApps;
@@ -43,11 +45,23 @@ public partial class DockWindow : OverlayWindow
         _runningApps = runningApps;
         InitializeComponent();
 
-        if (glass)
-            UseGlass();
-
         Panel.CornerRadius = new CornerRadius(Radius);
         Sheen.CornerRadius = new CornerRadius(Math.Max(0, Radius - 1));
+        if (glass)
+        {
+            UseGlass();
+            // The glass draws the body (tint, sheen, border) so it can never lag behind the blur.
+            // The WPF body stays as an invisible hit target: alpha 1/255 keeps the gaps between
+            // icons part of the dock (fully transparent pixels would pass the mouse through,
+            // and hovering a gap would count as leaving the dock).
+            Panel.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+            Panel.BorderThickness = new Thickness(0);
+            Sheen.Visibility = Visibility.Collapsed;
+        }
+
+        // Sub-pixel icon motion: rounding positions to whole pixels makes moving icons judder.
+        Icons.UseLayoutRounding = false;
+        Icons.SnapsToDevicePixels = false;
         Panel.Height = PanelHeight;
         Panel.Margin = new Thickness(0, 0, 0, _settings.BottomMargin);
         Icons.Height = IconDip;
@@ -81,6 +95,9 @@ public partial class DockWindow : OverlayWindow
     /// <summary>Space above the body for magnified icons plus the click bounce.</summary>
     private double Headroom => IconDip * (MaxScale - 1) + IconDip * 0.2 + 4;
 
+    /// <summary>Widest the body gets at full magnification (DIPs).</summary>
+    private double _maxPanelWidth;
+
     /// <summary>Window size (DIPs) that fits the dock at its widest magnification.</summary>
     public Size GetWindowSize()
     {
@@ -91,8 +108,17 @@ public partial class DockWindow : OverlayWindow
             for (double x = -EffectWidth / 2; x <= widest + EffectWidth / 2; x += 4)
                 widest = Math.Max(widest, ContentWidth(TargetScales(x), null));
         }
-        return new Size(Math.Ceiling(widest + 2 * Pad + 2 * SideMargin),
+        _maxPanelWidth = Math.Ceiling(widest + 2 * Pad);
+        return new Size(_maxPanelWidth + 2 * SideMargin,
                         Math.Ceiling(_settings.BottomMargin + PanelHeight + Headroom));
+    }
+
+    protected override GlassStyle GetGlassStyle(ThemeService theme)
+    {
+        byte alpha = (byte)Math.Round(Math.Clamp(theme.DockOpacity, 0, 1) * 255);
+        return theme.IsDark
+            ? new GlassStyle(Color.FromArgb(alpha, 45, 45, 45), Color.FromArgb(41, 255, 255, 255), Sheen: true)
+            : new GlassStyle(Color.FromArgb(alpha, 246, 246, 246), Color.FromArgb(26, 0, 0, 0), Sheen: true);
     }
 
     /// <summary>The dock body's current rectangle on screen (physical px).</summary>
@@ -111,16 +137,57 @@ public partial class DockWindow : OverlayWindow
     public override void SetBounds(RECT r)
     {
         _bounds = r;
-        base.SetBounds(r);
+        NoteBounds(r);
+        if (Glass is null || !TryGetGlassPlacement(out var glassWindow, out var shape, out float radius, out float dpi))
+        {
+            NativeMethods.SetWindowPos(Handle, NativeMethods.HWND_TOPMOST, r.Left, r.Top, r.Width, r.Height, NativeMethods.SWP_NOACTIVATE);
+            return;
+        }
+
+        // Move the dock and its glass in one batch so they land in the same frame (no wobble
+        // between them while sliding in and out).
+        var batch = NativeMethods.BeginDeferWindowPos(2);
+        batch = NativeMethods.DeferWindowPos(batch, Glass.Handle, NativeMethods.HWND_TOPMOST,
+            glassWindow.Left, glassWindow.Top, glassWindow.Width, glassWindow.Height, NativeMethods.SWP_NOACTIVATE);
+        batch = NativeMethods.DeferWindowPos(batch, Handle, NativeMethods.HWND_TOPMOST,
+            r.Left, r.Top, r.Width, r.Height, NativeMethods.SWP_NOACTIVATE);
+        NativeMethods.EndDeferWindowPos(batch);
+        Glass.SetShape(glassWindow, shape, radius, dpi, alreadyPlaced: true);
     }
 
     /// <summary>The glass follows the body (not the whole window), including while it widens.</summary>
     protected override void UpdateGlass()
     {
-        if (Glass is null || _bounds.Width <= 0 || double.IsNaN(Panel.Width))
-            return;
-        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
-        Glass.SetShape(PanelScreenRect, (float)(Radius * dpi));
+        if (Glass is not null && TryGetGlassPlacement(out var glassWindow, out var shape, out float radius, out float dpi))
+            Glass.SetShape(glassWindow, shape, radius, dpi);
+    }
+
+    /// <summary>
+    /// Where the glass window goes and where the body sits inside it. At rest the window hugs the
+    /// body (so nothing beside the dock is covered); while magnifying it spans the widest the body
+    /// can get, so each frame only moves the compositor shape instead of resizing a window.
+    /// </summary>
+    private bool TryGetGlassPlacement(out RECT window, out RECT shape, out float radius, out float dpi)
+    {
+        window = shape = default;
+        radius = dpi = 1;
+        if (_bounds.Width <= 0 || double.IsNaN(Panel.Width))
+            return false;
+        double scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        dpi = (float)scale;
+        radius = (float)(Radius * scale);
+        shape = PanelScreenRect;
+        if (_animating || _mouseX is not null)
+        {
+            int wide = (int)Math.Ceiling(_maxPanelWidth * scale);
+            int left = _bounds.Left + (_bounds.Width - wide) / 2;
+            window = new RECT(Math.Min(left, shape.Left), shape.Top, Math.Max(left + wide, shape.Right), shape.Bottom);
+        }
+        else
+        {
+            window = shape;
+        }
+        return true;
     }
 
     // ── Items ────────────────────────────────────────────────────────────────────────────────
@@ -235,12 +302,12 @@ public partial class DockWindow : OverlayWindow
 
     private void OnFrame(object? sender, EventArgs e)
     {
-        // The design lerps a fixed fraction per 60 Hz frame; scale it to the real frame time so
-        // it feels the same on any refresh rate and doesn't lurch after a slow frame.
+        // Exponential approach toward the target, in real time so it feels the same at any refresh
+        // rate. (The design's 0.2 / 0.12 per 60 Hz frame is τ ≈ 75 / 130 ms, which felt sluggish.)
         double dt = Math.Min(0.05, _frameClock.Elapsed.TotalSeconds);
         _frameClock.Restart();
-        double perFrame = _mouseX is not null ? 0.2 : 0.12;
-        double k = 1 - Math.Pow(1 - perFrame, dt * 60);
+        double tau = _mouseX is not null ? HoverTimeConstant : LeaveTimeConstant;
+        double k = 1 - Math.Exp(-dt / tau);
 
         var targetScales = TargetScales(_mouseX);
         var targetPositions = CalculatePositions(targetScales);

@@ -333,4 +333,15 @@ internal static class NativeMethods
     public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
 
     public const int GWLP_HWNDPARENT = -8; // a top-level window's owner
+
+    // Batched window moves: all windows in the batch move in the same frame.
+    [DllImport("user32.dll")]
+    public static extern IntPtr BeginDeferWindowPos(int count);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr DeferWindowPos(IntPtr winPosInfo, IntPtr hWnd, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EndDeferWindowPos(IntPtr winPosInfo);
 }
