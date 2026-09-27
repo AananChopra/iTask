@@ -70,7 +70,13 @@ public sealed class ForegroundWatcher : IDisposable
     /// </summary>
     public static ForegroundKind Classify(IntPtr monitor, RECT monitorBounds)
     {
-        var front = FrontMostAppWindow(monitor);
+        // Prefer the OS's own foreground window when it's on this monitor: Z-order (walked below,
+        // for the *other* monitors) can lag actual focus after things like Win+D or rapid app
+        // switching, leaving it pointing at a window that's no longer really in front.
+        var fg = GetForegroundWindow();
+        var front = IsAppWindow(fg) && MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST) == monitor
+            ? fg
+            : FrontMostAppWindow(monitor);
         if (front == IntPtr.Zero)
             return ForegroundKind.Desktop;
         if (IsZoomed(front))
@@ -100,7 +106,11 @@ public sealed class ForegroundWatcher : IDisposable
         if (!IsWindowVisible(hwnd) || IsIconic(hwnd))
             return false;
         long ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
-        if ((ex & WS_EX_TOPMOST) != 0 || (ex & WS_EX_NOACTIVATE) != 0)
+        // Not WS_EX_TOPMOST: on this Windows build the current foreground window commonly carries it
+        // too (seemingly whenever it was just activated), so treating it as "some overlay/widget"
+        // wrongly excluded the very app that's supposed to hide the dock. WS_EX_NOACTIVATE alone
+        // (our bars never activate) already keeps our own windows out of this.
+        if ((ex & WS_EX_NOACTIVATE) != 0)
             return false; // overlays, widgets, our own bars
         if ((ex & WS_EX_TOOLWINDOW) != 0 && (ex & WS_EX_APPWINDOW) == 0)
             return false;

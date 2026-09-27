@@ -24,6 +24,7 @@ public sealed class DockAutoHide : IDisposable
     private readonly DockWindow _dock;
     private readonly ForegroundWatcher _foreground;
     private readonly DispatcherTimer _cursorTimer;
+    private readonly DispatcherTimer _watchdog;
     private MonitorInfo _monitor;
     private RECT _home;           // where the dock sits when shown (physical px)
     private bool _enabled;
@@ -47,6 +48,13 @@ public sealed class DockAutoHide : IDisposable
         // Only runs while the dock is auto-hidden or revealed; GetCursorPos is cheap.
         _cursorTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(16) };
         _cursorTimer.Tick += (_, _) => SampleCursor();
+        // Safety net: we normally re-classify only on foreground-change events, but a rapid flurry of
+        // them (e.g. hammering Win+D) can catch a window mid-transition — briefly and legitimately
+        // topmost, or not yet un-cloaked — and misclassify it as "nothing in front". With no further
+        // event to correct it, that stale read would stick forever. Re-checking periodically bounds
+        // how long a bad read can last.
+        _watchdog = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+        _watchdog.Tick += (_, _) => Evaluate();
         _foreground.Changed += OnForegroundChanged;
     }
 
@@ -56,6 +64,7 @@ public sealed class DockAutoHide : IDisposable
         set
         {
             _enabled = value;
+            if (_enabled) _watchdog.Start(); else _watchdog.Stop();
             Evaluate();
         }
     }
@@ -248,6 +257,7 @@ public sealed class DockAutoHide : IDisposable
     {
         _foreground.Changed -= OnForegroundChanged;
         _cursorTimer.Stop();
+        _watchdog.Stop();
         StopAnimation();
     }
 }
