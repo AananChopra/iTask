@@ -17,4 +17,5 @@ public sealed record ShellServices(
     ForegroundWatcher Foreground,
     RunningAppsService RunningApps,
     FlyoutHost Flyouts,
+    SettingsService Settings,
     TrayHost? Tray);

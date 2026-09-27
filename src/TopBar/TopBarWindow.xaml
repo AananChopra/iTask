@@ -18,16 +18,8 @@
             </Grid.ColumnDefinitions>
 
             <!-- Left: iTask menu -->
-            <Button x:Name="MenuButton" Style="{StaticResource BarButtonStyle}" Click="MenuButton_Click" ToolTip="iTask">
+            <Button x:Name="MenuButton" Style="{StaticResource BarButtonStyle}" Click="MenuButton_Click">
                 <TextBlock Text="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="14" />
-                <Button.ContextMenu>
-                    <ContextMenu x:Name="AppMenu" Placement="Bottom">
-                        <MenuItem Header="Windows Settings" Click="Settings_Click" />
-                        <MenuItem Header="Task Manager" Click="TaskManager_Click" />
-                        <Separator />
-                        <MenuItem Header="Quit iTask" Click="Quit_Click" />
-                    </ContextMenu>
-                </Button.ContextMenu>
             </Button>
 
             <!-- Left: open apps -->
@@ -92,12 +84,14 @@
                     </StackPanel>
                 </Button>
 
-                <!-- Date & time: display only -->
-                <StackPanel x:Name="ClockPanel" Orientation="Horizontal" Margin="8,0,6,0" VerticalAlignment="Center"
-                            DataContext="{Binding Clock}" ToolTip="{Binding LongDateText}" Background="Transparent">
-                    <TextBlock x:Name="DateLabel" Text="{Binding DateText}" Margin="0,0,10,0" />
-                    <TextBlock x:Name="TimeLabel" Text="{Binding TimeText}" />
-                </StackPanel>
+                <!-- Date & time: opens the calendar -->
+                <Button x:Name="ClockButton" Style="{StaticResource BarButtonStyle}" Margin="4,3,2,3" Click="ClockButton_Click"
+                        DataContext="{Binding Clock}" ToolTip="{Binding LongDateText}">
+                    <StackPanel x:Name="ClockPanel" Orientation="Horizontal">
+                        <TextBlock x:Name="DateLabel" Text="{Binding DateText}" Margin="0,0,10,0" />
+                        <TextBlock x:Name="TimeLabel" Text="{Binding TimeText}" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </Grid>
     </Border>

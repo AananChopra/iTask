@@ -16,6 +16,8 @@ public enum DockVisibility
     Smart,
     /// <summary>Always shown.</summary>
     AlwaysVisible,
+    /// <summary>Always hidden; revealed by pushing the cursor to the bottom edge.</summary>
+    AutoHide,
 }
 
 public sealed class AppSettings

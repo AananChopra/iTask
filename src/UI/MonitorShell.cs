@@ -37,7 +37,8 @@ public sealed class MonitorShell : IDisposable
 
     public MonitorInfo Monitor { get; private set; }
 
-    private bool SmartDock => _settings.Dock.Visibility == DockVisibility.Smart;
+    /// <summary>The dock hides at times (smart or auto-hide), so it must not reserve screen space.</summary>
+    private bool DockHides => _settings.Dock.Visibility != DockVisibility.AlwaysVisible;
 
     public void Start()
     {
@@ -47,16 +48,25 @@ public sealed class MonitorShell : IDisposable
 
         _topAppBar = CreateAppBar(_topBar, AppBarEdge.Top);
         // A smart-hiding dock must not reserve space: maximized apps get the full height beneath it.
-        if (!SmartDock && _settings.Dock.ReserveSpace)
+        if (!DockHides && _settings.Dock.ReserveSpace)
             _dockAppBar = CreateAppBar(_dock, AppBarEdge.Bottom);
 
         Layout();
         _topBar.ShowPassive();
-        _dockAutoHide.IsEnabled = SmartDock;
+        _dockAutoHide.AlwaysHide = _settings.Dock.Visibility == DockVisibility.AutoHide;
+        _dockAutoHide.IsEnabled = DockHides;
 
         _topBar.DpiChanged += (_, _) => RequestLayout();
         _dock.DpiChanged += (_, _) => RequestLayout();
         _services.Theme.Changed += OnThemeChanged;
+        _services.Foreground.Activated += OnAppActivated;
+        _services.RunningApps.AppActivated += OnAppActivated;
+    }
+
+    private void OnAppActivated(object? sender, EventArgs e)
+    {
+        _topBar.BringToTop();
+        _dock.BringToTop();
     }
 
     private AppBar CreateAppBar(OverlayWindow window, AppBarEdge edge)
@@ -166,6 +176,8 @@ public sealed class MonitorShell : IDisposable
     public void Dispose()
     {
         _services.Theme.Changed -= OnThemeChanged;
+        _services.Foreground.Activated -= OnAppActivated;
+        _services.RunningApps.AppActivated -= OnAppActivated;
         _dockAutoHide.Dispose();
         _topAppBar?.Dispose();
         _dockAppBar?.Dispose();

@@ -15,7 +15,13 @@ namespace iTask.WindowsIntegration;
 /// <summary>One running application: all of its taskbar-worthy windows grouped together.</summary>
 public sealed class RunningApp : INotifyPropertyChanged
 {
-    internal RunningApp(string key) => Key = key;
+    private readonly RunningAppsService _owner;
+
+    internal RunningApp(string key, RunningAppsService owner)
+    {
+        Key = key;
+        _owner = owner;
+    }
 
     public string Key { get; }
     public string Name { get; private set; } = "";
@@ -72,6 +78,9 @@ public sealed class RunningApp : INotifyPropertyChanged
         if (target is null)
             return;
         bool ok = Activate(target.Handle);
+        // Right now, not when the foreground event arrives ~25 ms later: an always-on-top app we
+        // just activated sits over the bars until they re-assert, and that gap is a visible flicker.
+        _owner.RaiseAppActivated();
         Log.Info($"Toggle {Name}: activated '{target.Title}' ({(ok ? "ok" : "refused")})");
     }
 
@@ -151,6 +160,11 @@ public sealed class RunningAppsService : IDisposable
 
     public ObservableCollection<RunningApp> Apps { get; } = new();
 
+    /// <summary>Raised synchronously right after we activated one of the apps (dock / top bar click).</summary>
+    public event EventHandler? AppActivated;
+
+    internal void RaiseAppActivated() => AppActivated?.Invoke(this, EventArgs.Empty);
+
     private void OnWindowChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ApplicationWindow.State) or nameof(ApplicationWindow.Icon)
@@ -202,7 +216,7 @@ public sealed class RunningAppsService : IDisposable
             var app = Apps.FirstOrDefault(a => a.Key == key);
             if (app is null)
             {
-                app = new RunningApp(key);
+                app = new RunningApp(key, this);
                 Apps.Add(app); // new apps go to the end, like a dock
                 Log.Info($"Dock: added {key} ({list.Count} window(s))");
             }

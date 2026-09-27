@@ -69,6 +69,9 @@ public sealed class DockAutoHide : IDisposable
         }
     }
 
+    /// <summary>Hide even when nothing is maximized (auto-hide mode), not just over maximized apps.</summary>
+    public bool AlwaysHide { get; set; }
+
     /// <summary>Sets where the dock lives when visible (called from layout).</summary>
     public void SetHome(RECT home, MonitorInfo monitor)
     {
@@ -105,7 +108,7 @@ public sealed class DockAutoHide : IDisposable
         {
             var kind = ForegroundWatcher.Classify(_monitor.Handle, _monitor.Bounds);
             bool wasHidden = _wantHidden;
-            _wantHidden = kind == ForegroundKind.Maximized;
+            _wantHidden = AlwaysHide || kind == ForegroundKind.Maximized;
             // Switching to a maximized app *from* the dock: stay put until the cursor leaves it.
             if (_wantHidden && !wasHidden && _offset < 0.5 && IsCursorOverDock())
             {

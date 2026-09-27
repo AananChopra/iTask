@@ -129,9 +129,17 @@ public sealed class ForegroundWatcher : IDisposable
         if (WindowUtils.IsOwnWindow(hwnd))
             return;
         if (eventType == EVENT_SYSTEM_FOREGROUND)
+        {
             TrackForeground(hwnd);
+            // Synchronously, not coalesced: activating an always-on-top window lifts it above our
+            // bars, and every millisecond until they re-assert is visible as a flicker.
+            Activated?.Invoke(this, EventArgs.Empty);
+        }
         RaiseChanged();
     }
+
+    /// <summary>Raised immediately (not coalesced) whenever another app's window is activated.</summary>
+    public event EventHandler? Activated;
 
     private void OnLocationEvent(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
     {

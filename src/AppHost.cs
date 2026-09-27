@@ -56,6 +56,8 @@ public sealed class AppHost : IDisposable
 
         var theme = Track(new ThemeService(_settings.Appearance));
         var foreground = Track(new ForegroundWatcher());
+        var settings = Track(new SettingsService(_settings, theme));
+        settings.Changed += (_, _) => RebuildShells();
         _services = new ShellServices(
             theme,
             Track(new ClockService()),
@@ -67,6 +69,7 @@ public sealed class AppHost : IDisposable
             foreground,
             Track(new RunningAppsService()),
             Track(new FlyoutHost(theme, foreground)),
+            settings,
             tray);
 
         SyncMonitors();
@@ -118,6 +121,22 @@ public sealed class AppHost : IDisposable
             _shells.Add(shell);
             shell.Start();
         }
+    }
+
+    /// <summary>Settings changed: recreate every display's bars from the updated settings.</summary>
+    private void RebuildShells()
+    {
+        if (_disposed)
+            return;
+        _services!.Flyouts.Close();
+        foreach (var shell in _shells)
+        {
+            try { shell.Dispose(); }
+            catch (Exception ex) { Log.Error("Shell dispose failed", ex); }
+        }
+        _shells.Clear();
+        SyncMonitors();
+        Log.Info("Settings applied.");
     }
 
     private void OnTaskbarCreated(object? sender, EventArgs e)

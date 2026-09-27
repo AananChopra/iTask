@@ -48,17 +48,13 @@ public partial class TopBarWindow : OverlayWindow
         TimeLabel.Visibility = settings.ShowTime ? Visibility.Visible : Visibility.Collapsed;
         DateLabel.Margin = settings.ShowTime ? new Thickness(0, 0, 10, 0) : new Thickness(0);
         if (!settings.ShowDate && !settings.ShowTime)
-            ClockPanel.Visibility = Visibility.Collapsed;
+            ClockButton.Visibility = Visibility.Collapsed;
     }
 
     protected override BackdropKind GetBackdrop(ThemeService theme) => theme.TopBarBackdrop;
 
-    private void MenuButton_Click(object sender, RoutedEventArgs e)
-    {
-        AppMenu.PlacementTarget = MenuButton;
-        AppMenu.Placement = PlacementMode.Bottom;
-        AppMenu.IsOpen = true;
-    }
+    private void MenuButton_Click(object sender, RoutedEventArgs e) =>
+        ToggleMenu("app", MenuButton, () => new AppMenuFlyout(_services.Settings.ShowWindow), 210);
 
     // ── Status menus (our own macOS-style dropdowns, opening from the bar) ───────────────────
 
@@ -70,6 +66,9 @@ public partial class TopBarWindow : OverlayWindow
 
     private void BrightnessButton_Click(object sender, RoutedEventArgs e) =>
         ToggleMenu("brightness", BrightnessButton, () => new BrightnessFlyout(_brightness), 260);
+
+    private void ClockButton_Click(object sender, RoutedEventArgs e) =>
+        ToggleMenu("calendar", ClockButton, () => new CalendarFlyout(), 270);
 
     private void BatteryButton_Click(object sender, RoutedEventArgs e) =>
         ToggleMenu("battery", BatteryButton, () => new BatteryFlyout(_services.Battery), 250);
@@ -128,9 +127,4 @@ public partial class TopBarWindow : OverlayWindow
         e.Handled = true;
     }
 
-    private void Settings_Click(object sender, RoutedEventArgs e) => ShellCommands.OpenSettings();
-
-    private void TaskManager_Click(object sender, RoutedEventArgs e) => ShellCommands.OpenTaskManager();
-
-    private void Quit_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
 }

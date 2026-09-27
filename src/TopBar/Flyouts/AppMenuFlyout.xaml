@@ -1,0 +1,12 @@
+<UserControl x:Class="iTask.TopBar.Flyouts.AppMenuFlyout"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel>
+        <Button Style="{StaticResource FlyoutItemStyle}" Content="iTask Settings…" Click="ITaskSettings_Click" />
+        <Border Style="{StaticResource FlyoutSeparator}" />
+        <Button Style="{StaticResource FlyoutItemStyle}" Content="Windows Settings" Click="WindowsSettings_Click" />
+        <Button Style="{StaticResource FlyoutItemStyle}" Content="Task Manager" Click="TaskManager_Click" />
+        <Border Style="{StaticResource FlyoutSeparator}" />
+        <Button Style="{StaticResource FlyoutItemStyle}" Content="Quit iTask" Click="Quit_Click" />
+    </StackPanel>
+</UserControl>

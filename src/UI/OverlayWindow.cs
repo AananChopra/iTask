@@ -169,6 +169,17 @@ public class OverlayWindow : Window
         UpdateGlass();
     }
 
+    /// <summary>
+    /// Re-asserts the top of the always-on-top band (like the Windows taskbar does) after another
+    /// always-on-top window was activated over us. The glass is the owner, so raising it raises both.
+    /// </summary>
+    public void BringToTop()
+    {
+        if (Handle == IntPtr.Zero || !IsVisible)
+            return;
+        SetWindowPos(Glass?.Handle ?? Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
     /// <summary>Shows without activating (SW_SHOWNOACTIVATE) — never steals focus.</summary>
     public virtual void ShowPassive()
     {

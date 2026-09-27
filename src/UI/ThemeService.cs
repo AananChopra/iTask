@@ -85,6 +85,13 @@ public sealed class ThemeService : IDisposable
         res["MenuBorderBrush"] = Brush(Colors.Black, IsDark ? 0.45 : 0.10);
         res["MenuHoverBrush"] = Brush(ink, IsDark ? 0.08 : 0.05);
         res["SeparatorBrush"] = Brush(ink, IsDark ? 0.10 : 0.08);
+
+        // Settings window: a plain surface with slightly raised grouped cards.
+        res["WindowBackgroundBrush"] = Brush(IsDark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xF3, 0xF3, 0xF3), 1.0);
+        res["CardBrush"] = Brush(IsDark ? Color.FromRgb(0x2B, 0x2B, 0x2B) : Colors.White, 1.0);
+        res["CardBorderBrush"] = Brush(ink, IsDark ? 0.08 : 0.07);
+        res["SegmentTrackBrush"] = Brush(ink, IsDark ? 0.08 : 0.06);
+        res["SegmentSelectedBrush"] = Brush(IsDark ? Color.FromRgb(0x5A, 0x5A, 0x5A) : Colors.White, 1.0);
     }
 
     private static double Clamp(double v) => Math.Clamp(v, 0, 1);
