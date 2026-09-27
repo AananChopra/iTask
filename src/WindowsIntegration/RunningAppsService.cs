@@ -79,7 +79,17 @@ public sealed class RunningApp : INotifyPropertyChanged
     private static bool Activate(IntPtr hwnd)
     {
         if (IsIconic(hwnd))
+        {
             ShowWindow(hwnd, SW_RESTORE);
+            // Windows of higher-integrity processes (e.g. the On-Screen Keyboard, which runs with
+            // UIAccess) silently refuse ShowWindow from us; a posted restore command gets through.
+            if (IsIconic(hwnd))
+                PostMessage(hwnd, WM_SYSCOMMAND, new IntPtr(SC_RESTORE), IntPtr.Zero);
+        }
+        // Never-activate windows (the On-Screen Keyboard) refuse focus by design; showing them is
+        // all there is, and the Alt-tap fallback below would only open the current app's menu bar.
+        if ((GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64() & WS_EX_NOACTIVATE) != 0)
+            return true;
         if (SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd)
             return true;
         // Foreground lock refused us: a synthetic Alt tap lets the next SetForegroundWindow through.

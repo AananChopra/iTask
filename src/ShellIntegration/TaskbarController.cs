@@ -143,15 +143,22 @@ public sealed class TaskbarController : IDisposable
             ShowWindow(hwnd, SW_HIDE);
     }
 
-    private static IEnumerable<IntPtr> FindTrayWindows()
+    /// <summary>
+    /// Snapshot, not a lazy walk: FindWindowEx continues "after" a window in z-order, and callers
+    /// re-order these windows (HWND_TOPMOST) — with two secondary taskbars they'd leapfrog each
+    /// other and the walk would never end.
+    /// </summary>
+    private static List<IntPtr> FindTrayWindows()
     {
+        var trays = new List<IntPtr>();
         var primary = WindowUtils.FindExplorerTaskbar();
         if (primary != IntPtr.Zero)
-            yield return primary;
+            trays.Add(primary);
 
         var secondary = IntPtr.Zero;
         while ((secondary = FindWindowEx(IntPtr.Zero, secondary, SecondaryTrayClass, null)) != IntPtr.Zero)
-            yield return secondary;
+            trays.Add(secondary);
+        return trays;
     }
 
     private static int GetState()

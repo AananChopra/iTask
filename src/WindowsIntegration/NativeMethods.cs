@@ -56,6 +56,12 @@ internal static class NativeMethods
     public const int WM_DPICHANGED = 0x02E0;
     public const int MA_NOACTIVATE = 3;
     public const int SPI_SETWORKAREA = 0x002F;
+    public const uint WM_SYSCOMMAND = 0x0112;
+    public const int SC_RESTORE = 0xF120;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
