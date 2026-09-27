@@ -39,7 +39,9 @@ public static class SettingsStore
         catch (Exception ex)
         {
             Log.Error("Failed to load settings; using defaults", ex);
-            return new AppSettings();
+            var defaults = new AppSettings { SettingsVersion = AppSettings.CurrentVersion };
+            Save(defaults); // replace the bad file so it doesn't fail forever
+            return defaults;
         }
     }
 
