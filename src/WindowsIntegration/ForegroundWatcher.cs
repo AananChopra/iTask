@@ -124,6 +124,10 @@ public sealed class ForegroundWatcher : IDisposable
 
     private void OnForegroundEvent(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
     {
+        // Our own surfaces never count as "switching apps" (Windows can still hand them foreground,
+        // e.g. a menu opened on another display) — reacting would close that very menu.
+        if (WindowUtils.IsOwnWindow(hwnd))
+            return;
         if (eventType == EVENT_SYSTEM_FOREGROUND)
             TrackForeground(hwnd);
         RaiseChanged();

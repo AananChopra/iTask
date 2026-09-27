@@ -29,7 +29,7 @@ public sealed class MonitorShell : IDisposable
         Monitor = monitor;
         _settings = settings;
         _services = services;
-        _topBar = new TopBarWindow(settings.TopBar, services, glass: settings.Appearance.TopBarBackdrop == BackdropKind.Blur);
+        _topBar = new TopBarWindow(settings.TopBar, services, monitor.DeviceName, glass: settings.Appearance.TopBarBackdrop == BackdropKind.Blur);
         _dock = new DockWindow(settings.Dock, services.RunningApps, settings.Appearance.DockGlass);
         _dock.ContentChanged += (_, _) => RequestLayout();
         _dockAutoHide = new DockAutoHide(_dock, services.Foreground, monitor);

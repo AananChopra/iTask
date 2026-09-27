@@ -100,8 +100,7 @@
                 </Button>
 
                 <Button x:Name="BrightnessButton" Style="{StaticResource BarButtonStyle}" Click="BrightnessButton_Click"
-                        DataContext="{Binding Brightness}" ToolTip="{Binding Description}"
-                        Visibility="{Binding HasBrightness, Converter={StaticResource BoolToVisibility}}">
+                        DataContext="{Binding Brightness}" ToolTip="{Binding Description}">
                     <TextBlock Text="&#xE706;" FontFamily="{StaticResource IconFont}" FontSize="14" />
                 </Button>
 

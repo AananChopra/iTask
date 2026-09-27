@@ -12,10 +12,14 @@ namespace iTask.TopBar;
 public partial class TopBarWindow : OverlayWindow
 {
     private readonly ShellServices _services;
+    private readonly TopBarSettings _settings;
+    private readonly string _deviceName;
 
-    public TopBarWindow(TopBarSettings settings, ShellServices services, bool glass)
+    public TopBarWindow(TopBarSettings settings, ShellServices services, string deviceName, bool glass)
     {
         _services = services;
+        _settings = settings;
+        _deviceName = deviceName;
         if (glass)
             UseGlass();
         InitializeComponent();
@@ -40,8 +44,9 @@ public partial class TopBarWindow : OverlayWindow
         // Visibility bindings handle "no battery" / "no audio device"; settings can hide them outright.
         if (!settings.ShowNetwork) NetworkButton.Visibility = Visibility.Collapsed;
         if (!settings.ShowVolume) VolumeButton.Visibility = Visibility.Collapsed;
-        if (!settings.ShowBrightness) BrightnessButton.Visibility = Visibility.Collapsed;
         if (!settings.ShowBattery) BatteryButton.Visibility = Visibility.Collapsed;
+        UpdateBrightnessButton();
+        services.Brightness.PropertyChanged += OnBrightnessChanged;
 
         DateLabel.Visibility = settings.ShowDate ? Visibility.Visible : Visibility.Collapsed;
         TimeLabel.Visibility = settings.ShowTime ? Visibility.Visible : Visibility.Collapsed;
@@ -98,8 +103,19 @@ public partial class TopBarWindow : OverlayWindow
     protected override void OnClosed(EventArgs e)
     {
         _services.Foreground.Changed -= OnForegroundChanged;
+        _services.Brightness.PropertyChanged -= OnBrightnessChanged;
         base.OnClosed(e);
     }
+
+    private void OnBrightnessChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
+        Dispatcher.BeginInvoke(UpdateBrightnessButton);
+
+    // Brightness is per panel (usually only the laptop's own), so only that display's bar offers it.
+    private void UpdateBrightnessButton() =>
+        BrightnessButton.Visibility =
+            _settings.ShowBrightness && _services.Brightness.HasBrightness && _services.Brightness.Controls(_deviceName)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
 
     // Chevron points down when closed, up while the dropdown is open.
     private void TrayPopup_OpenedChanged(object? sender, EventArgs e) =>
