@@ -1,0 +1,21 @@
+<UserControl x:Class="iTask.TopBar.Flyouts.TrayFlyout"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:top="clr-namespace:iTask.TopBar">
+    <Grid Margin="2">
+        <ItemsControl x:Name="Icons" Focusable="False">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <top:TrayIconView Width="36" Height="32" />
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock x:Name="EmptyText" Text="No other icons" Style="{StaticResource FlyoutDetailText}"
+                   Margin="8,6" Visibility="Collapsed" />
+    </Grid>
+</UserControl>

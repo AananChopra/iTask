@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -8,17 +7,43 @@ using iTask.Utilities;
 namespace iTask.SystemInfo;
 
 /// <summary>
-/// Built-in display brightness via WMI (root\WMI, WmiMonitorBrightness / WmiMonitorBrightnessMethods) —
-/// the same mechanism the laptop's Fn keys and Windows' own slider use. Only the internal panel (and a
-/// few DDC-aware externals) expose this; most external monitors don't, so <see cref="HasBrightness"/>
-/// can be false.
+/// Per-display brightness: the laptop's built-in panel through WMI (what its Fn keys and Windows'
+/// own slider use), external monitors through DDC/CI (what their on-screen menu buttons change).
 /// </summary>
-public sealed class BrightnessService : INotifyPropertyChanged, IDisposable
+public sealed class BrightnessService : IDisposable
+{
+    private readonly PanelBrightness _panel = new();
+    private readonly Dictionary<string, DdcBrightness> _external = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The brightness control for the display with GDI name <paramref name="deviceName"/> (e.g. \\.\DISPLAY1).</summary>
+    public DisplayBrightness For(string deviceName)
+    {
+        if (_panel.HasBrightness && _panel.Controls(deviceName))
+            return _panel;
+        if (!_external.TryGetValue(deviceName, out var ddc))
+            _external[deviceName] = ddc = new DdcBrightness(deviceName);
+        return ddc;
+    }
+
+    public void Dispose()
+    {
+        _panel.Dispose();
+        foreach (var ddc in _external.Values)
+            ddc.Dispose();
+    }
+}
+
+/// <summary>
+/// Built-in panel via WMI (root\WMI, WmiMonitorBrightness / WmiMonitorBrightnessMethods). Only the
+/// internal panel (and rare externals) expose this.
+/// </summary>
+internal sealed class PanelBrightness : DisplayBrightness, IDisposable
 {
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
-    private ManagementEventWatcher? _watcher;
+    private readonly ManagementEventWatcher? _watcher;
+    private string? _instance;
 
-    public BrightnessService()
+    public PanelBrightness()
     {
         Refresh();
         try
@@ -34,16 +59,7 @@ public sealed class BrightnessService : INotifyPropertyChanged, IDisposable
         }
     }
 
-    public bool HasBrightness { get; private set; }
-    /// <summary>0–100.</summary>
-    public int Brightness { get; private set; }
-
-    public string Description => HasBrightness ? $"Brightness {Brightness}%" : "No adjustable display";
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    /// <summary>Sets the built-in panel's brightness (0–100).</summary>
-    public void SetBrightness(int percent)
+    public override void SetBrightness(int percent)
     {
         percent = Math.Clamp(percent, 0, 100);
         try
@@ -63,10 +79,30 @@ public sealed class BrightnessService : INotifyPropertyChanged, IDisposable
         Refresh();
     }
 
-    /// <summary>
-    /// Whether the panel this service controls is the display with GDI name <paramref name="deviceName"/>
-    /// (e.g. \\.\DISPLAY1) — so only that display's bar offers a brightness control.
-    /// </summary>
+    public override void Refresh()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(@"root\WMI", "SELECT * FROM WmiMonitorBrightness");
+            foreach (ManagementBaseObject o in searcher.Get())
+            {
+                using var m = (ManagementObject)o;
+                Brightness = Convert.ToInt32(m["CurrentBrightness"]);
+                _instance = m["InstanceName"] as string;
+                HasBrightness = true;
+                Publish();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Brightness unavailable: {ex.Message}");
+        }
+        HasBrightness = false;
+        Publish();
+    }
+
+    /// <summary>Whether this panel is the display with GDI name <paramref name="deviceName"/>.</summary>
     public bool Controls(string deviceName)
     {
         if (_instance is null)
@@ -84,7 +120,11 @@ public sealed class BrightnessService : INotifyPropertyChanged, IDisposable
         return false;
     }
 
-    private string? _instance;
+    public void Dispose()
+    {
+        try { _watcher?.Stop(); } catch { /* already stopped */ }
+        _watcher?.Dispose();
+    }
 
     private const uint EDD_GET_DEVICE_INTERFACE_NAME = 1;
 
@@ -101,33 +141,4 @@ public sealed class BrightnessService : INotifyPropertyChanged, IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool EnumDisplayDevices(string device, uint index, ref DISPLAY_DEVICE info, uint flags);
-
-    private void Refresh()
-    {
-        try
-        {
-            using var searcher = new ManagementObjectSearcher(@"root\WMI", "SELECT * FROM WmiMonitorBrightness");
-            foreach (ManagementBaseObject o in searcher.Get())
-            {
-                using var m = (ManagementObject)o;
-                Brightness = Convert.ToInt32(m["CurrentBrightness"]);
-                _instance = m["InstanceName"] as string;
-                HasBrightness = true;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"Brightness unavailable: {ex.Message}");
-        }
-        HasBrightness = false;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
-    }
-
-    public void Dispose()
-    {
-        try { _watcher?.Stop(); } catch { /* already stopped */ }
-        _watcher?.Dispose();
-    }
 }

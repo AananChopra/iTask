@@ -9,14 +9,15 @@ namespace iTask.TopBar.Flyouts;
 /// <summary>Display menu: a brightness slider for the built-in panel.</summary>
 public partial class BrightnessFlyout : UserControl, IFlyoutContent
 {
-    private readonly BrightnessService _brightness;
+    private readonly DisplayBrightness _brightness;
     private bool _syncing;
 
-    public BrightnessFlyout(BrightnessService brightness)
+    public BrightnessFlyout(DisplayBrightness brightness)
     {
         _brightness = brightness;
         InitializeComponent();
         Sync();
+        brightness.Refresh(); // the monitor's own buttons may have changed it
         _brightness.PropertyChanged += OnBrightnessChanged;
         Unloaded += (_, _) => _brightness.PropertyChanged -= OnBrightnessChanged;
     }

@@ -3,6 +3,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using iTask.Configuration;
 using iTask.ShellIntegration;
+using iTask.SystemInfo;
 using iTask.TopBar.Flyouts;
 using iTask.UI;
 using iTask.WindowsIntegration;
@@ -13,13 +14,14 @@ public partial class TopBarWindow : OverlayWindow
 {
     private readonly ShellServices _services;
     private readonly TopBarSettings _settings;
-    private readonly string _deviceName;
+    private readonly DisplayBrightness _brightness;
 
     public TopBarWindow(TopBarSettings settings, ShellServices services, string deviceName, bool glass)
     {
         _services = services;
         _settings = settings;
-        _deviceName = deviceName;
+        // This display's own brightness (the laptop panel via WMI, an external monitor via DDC/CI).
+        _brightness = services.Brightness.For(deviceName);
         if (glass)
             UseGlass();
         InitializeComponent();
@@ -31,22 +33,16 @@ public partial class TopBarWindow : OverlayWindow
         else
             RunningApps.Visibility = Visibility.Collapsed;
 
-        if (settings.ShowTrayIcons && services.Tray is not null)
-        {
-            TrayIcons.ItemsSource = services.Tray.Icons;
-            services.Foreground.Changed += OnForegroundChanged;
-        }
-        else
-        {
+        if (!settings.ShowTrayIcons || services.Tray is null)
             TrayButton.Visibility = Visibility.Collapsed;
-        }
 
         // Visibility bindings handle "no battery" / "no audio device"; settings can hide them outright.
         if (!settings.ShowNetwork) NetworkButton.Visibility = Visibility.Collapsed;
         if (!settings.ShowVolume) VolumeButton.Visibility = Visibility.Collapsed;
         if (!settings.ShowBattery) BatteryButton.Visibility = Visibility.Collapsed;
+        BrightnessButton.DataContext = _brightness;
         UpdateBrightnessButton();
-        services.Brightness.PropertyChanged += OnBrightnessChanged;
+        _brightness.PropertyChanged += OnBrightnessChanged;
 
         DateLabel.Visibility = settings.ShowDate ? Visibility.Visible : Visibility.Collapsed;
         TimeLabel.Visibility = settings.ShowTime ? Visibility.Visible : Visibility.Collapsed;
@@ -73,53 +69,45 @@ public partial class TopBarWindow : OverlayWindow
         ToggleMenu("sound", VolumeButton, () => new SoundFlyout(_services.Audio), 280);
 
     private void BrightnessButton_Click(object sender, RoutedEventArgs e) =>
-        ToggleMenu("brightness", BrightnessButton, () => new BrightnessFlyout(_services.Brightness), 260);
+        ToggleMenu("brightness", BrightnessButton, () => new BrightnessFlyout(_brightness), 260);
 
     private void BatteryButton_Click(object sender, RoutedEventArgs e) =>
         ToggleMenu("battery", BatteryButton, () => new BatteryFlyout(_services.Battery), 250);
 
+    private void TrayButton_Click(object sender, RoutedEventArgs e)
+    {
+        var icons = _services.Tray!.Icons;
+        ToggleMenu("tray", TrayButton, () =>
+        {
+            var flyout = new TrayFlyout(icons);
+            // Chevron points up while the menu is open.
+            flyout.Loaded += (_, _) => TrayChevron.Text = "";
+            flyout.Unloaded += (_, _) => TrayChevron.Text = "";
+            return flyout;
+        }, TrayFlyout.WidthFor(icons.Cast<object>().Count()));
+    }
+
     private void ToggleMenu(string key, FrameworkElement anchor, Func<FrameworkElement> content, double width)
     {
-        TrayPopup.IsOpen = false;
         NativeMethods.GetWindowRect(Handle, out var bar);
         // Keyed per bar, so the same menu on another display opens there instead of toggling closed.
         _services.Flyouts.Toggle((this, key), anchor, bar.Bottom, content, width);
     }
 
-    // The dropdown can't use StaysOpen=False: that relies on the owner window being active, and ours
-    // never is. It closes on: the chevron again, any other click on the bar, or a foreground change
-    // (clicking another app or the desktop).
-    private void TrayButton_Click(object sender, RoutedEventArgs e) => TrayPopup.IsOpen = !TrayPopup.IsOpen;
-
-    private void OnForegroundChanged(object? sender, EventArgs e) => TrayPopup.IsOpen = false;
-
-    protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
-    {
-        base.OnPreviewMouseDown(e);
-        if (TrayPopup.IsOpen && !TrayButton.IsMouseOver)
-            TrayPopup.IsOpen = false;
-    }
-
     protected override void OnClosed(EventArgs e)
     {
-        _services.Foreground.Changed -= OnForegroundChanged;
-        _services.Brightness.PropertyChanged -= OnBrightnessChanged;
+        _brightness.PropertyChanged -= OnBrightnessChanged;
         base.OnClosed(e);
     }
 
     private void OnBrightnessChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
         Dispatcher.BeginInvoke(UpdateBrightnessButton);
 
-    // Brightness is per panel (usually only the laptop's own), so only that display's bar offers it.
+    // Hidden on displays that can't be dimmed (no WMI panel, no DDC/CI support).
     private void UpdateBrightnessButton() =>
-        BrightnessButton.Visibility =
-            _settings.ShowBrightness && _services.Brightness.HasBrightness && _services.Brightness.Controls(_deviceName)
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-
-    // Chevron points down when closed, up while the dropdown is open.
-    private void TrayPopup_OpenedChanged(object? sender, EventArgs e) =>
-        TrayChevron.Text = TrayPopup.IsOpen ? "" : "";
+        BrightnessButton.Visibility = _settings.ShowBrightness && _brightness.HasBrightness
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     private void AppButton_Click(object sender, RoutedEventArgs e)
     {
