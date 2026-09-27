@@ -20,7 +20,7 @@ internal sealed class DockItemView : Grid
     private readonly TranslateTransform _bounce = new();
     private readonly Image? _image;
 
-    private DockItemView(UIElement artwork, string name, double size, double maxScale)
+    private DockItemView(UIElement artwork, double size, double maxScale)
     {
         Width = Height = size;
         Children.Add(artwork);
@@ -36,9 +36,6 @@ internal sealed class DockItemView : Grid
         CacheMode = new BitmapCache(Math.Max(1, maxScale)) { SnapsToDevicePixels = false };
 
         Background = Brushes.Transparent; // hit-testable across the whole square
-        ToolTip = name;
-        ToolTipService.SetPlacement(this, PlacementMode.Top);
-        ToolTipService.SetInitialShowDelay(this, 300);
         _image = artwork as Image;
 
         double dot = Math.Max(3, size * 0.06);
@@ -56,7 +53,7 @@ internal sealed class DockItemView : Grid
     {
         var image = new Image { Stretch = Stretch.Uniform };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-        var view = new DockItemView(image, app.Name, size, maxScale) { App = app };
+        var view = new DockItemView(image, size, maxScale) { App = app };
         view.Refresh();
         return view;
     }
@@ -70,16 +67,15 @@ internal sealed class DockItemView : Grid
         double gap = Math.Max(1, size * 0.02);
         foreach (var margin in new[] { new Thickness(0, 0, gap, gap), new Thickness(gap, 0, 0, gap), new Thickness(0, gap, gap, 0), new Thickness(gap, gap, 0, 0) })
             logo.Children.Add(new Border { Background = blue, CornerRadius = new CornerRadius(1.5), Margin = margin });
-        return new DockItemView(logo, "Start", size, maxScale) { IsStart = true };
+        return new DockItemView(logo, size, maxScale) { IsStart = true };
     }
 
-    /// <summary>Re-reads name/icon from the app (called when the running-apps list updates).</summary>
+    /// <summary>Re-reads icon from the app (called when the running-apps list updates).</summary>
     public void Refresh()
     {
         if (App is null || _image is null)
             return;
         _image.Source = App.LargeIcon;
-        ToolTip = App.Name;
         Dot.Visibility = Visibility.Visible; // everything but Start is a running app
     }
 

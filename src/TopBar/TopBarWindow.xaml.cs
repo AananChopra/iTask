@@ -40,6 +40,7 @@ public partial class TopBarWindow : OverlayWindow
         // Visibility bindings handle "no battery" / "no audio device"; settings can hide them outright.
         if (!settings.ShowNetwork) NetworkButton.Visibility = Visibility.Collapsed;
         if (!settings.ShowVolume) VolumeButton.Visibility = Visibility.Collapsed;
+        if (!settings.ShowBrightness) BrightnessButton.Visibility = Visibility.Collapsed;
         if (!settings.ShowBattery) BatteryButton.Visibility = Visibility.Collapsed;
 
         DateLabel.Visibility = settings.ShowDate ? Visibility.Visible : Visibility.Collapsed;
@@ -65,6 +66,9 @@ public partial class TopBarWindow : OverlayWindow
 
     private void VolumeButton_Click(object sender, RoutedEventArgs e) =>
         ToggleMenu("sound", VolumeButton, () => new SoundFlyout(_services.Audio), 280);
+
+    private void BrightnessButton_Click(object sender, RoutedEventArgs e) =>
+        ToggleMenu("brightness", BrightnessButton, () => new BrightnessFlyout(_services.Brightness), 260);
 
     private void BatteryButton_Click(object sender, RoutedEventArgs e) =>
         ToggleMenu("battery", BatteryButton, () => new BatteryFlyout(_services.Battery), 250);

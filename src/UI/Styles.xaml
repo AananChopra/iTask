@@ -35,8 +35,6 @@
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         <Setter Property="Margin" Value="2,0" />
         <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="ToolTipService.Placement" Value="Top" />
-        <Setter Property="ToolTipService.InitialShowDelay" Value="400" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -123,6 +121,29 @@
                             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Tooltips styled to match the app (the system default is an unstyled light box with its own
+         font, which looked out of place over our dark, custom-drawn surfaces). -->
+    <Style TargetType="ToolTip">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="HasDropShadow" Value="True" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{DynamicResource MenuBackgroundBrush}" BorderBrush="{DynamicResource MenuBorderBrush}"
+                            BorderThickness="1" CornerRadius="6" Padding="8,4">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.25" />
+                        </Border.Effect>
+                        <ContentPresenter />
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

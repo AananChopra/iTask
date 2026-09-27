@@ -11,6 +11,7 @@ public sealed record ShellServices(
     ClockService Clock,
     BatteryService Battery,
     AudioService Audio,
+    BrightnessService Brightness,
     NetworkService Network,
     WifiService Wifi,
     ForegroundWatcher Foreground,

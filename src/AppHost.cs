@@ -61,6 +61,7 @@ public sealed class AppHost : IDisposable
             Track(new ClockService()),
             Track(new BatteryService()),
             Track(new AudioService()),
+            Track(new BrightnessService()),
             Track(new NetworkService()),
             Track(new WifiService()),
             foreground,

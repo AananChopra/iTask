@@ -41,6 +41,7 @@ public sealed class TopBarSettings
     public bool ShowTrayIcons { get; set; } = true;
     public bool ShowNetwork { get; set; } = true;
     public bool ShowVolume { get; set; } = true;
+    public bool ShowBrightness { get; set; } = true;
     public bool ShowBattery { get; set; } = true;
     public bool ShowDate { get; set; } = true;
     public bool ShowTime { get; set; } = true;

@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="ManagedShell" Version="0.0.374" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
 </Project>

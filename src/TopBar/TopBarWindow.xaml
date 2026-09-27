@@ -99,6 +99,12 @@
                     <local:VolumeIcon Level="{Binding Volume}" IsMuted="{Binding IsMuted}" />
                 </Button>
 
+                <Button x:Name="BrightnessButton" Style="{StaticResource BarButtonStyle}" Click="BrightnessButton_Click"
+                        DataContext="{Binding Brightness}" ToolTip="{Binding Description}"
+                        Visibility="{Binding HasBrightness, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="&#xE706;" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                </Button>
+
                 <Button x:Name="BatteryButton" Style="{StaticResource BarButtonStyle}" Click="BatteryButton_Click"
                         DataContext="{Binding Battery}" ToolTip="{Binding Description}"
                         Visibility="{Binding HasBattery, Converter={StaticResource BoolToVisibility}}">

@@ -356,12 +356,23 @@ public partial class DockWindow : OverlayWindow
         Panel.Width = content + 2 * Pad;
         Icons.Width = content;
 
+        // Sub-pixel positions keep motion smooth, but leave a settled icon's cached bitmap
+        // resampled across a pixel boundary, softening it. Snap only once it stops moving.
+        double dpi = _animating ? 0 : VisualTreeHelper.GetDpi(this).DpiScaleX;
+
         for (int i = 0; i < _items.Count; i++)
         {
             var item = _items[i];
             item.SetScale(_scales[i]);
-            Canvas.SetLeft(item, _positions[i] - IconDip / 2);
-            Canvas.SetLeft(item.Dot, _positions[i] - item.Dot.Width / 2);
+            double left = _positions[i] - IconDip / 2;
+            double dotLeft = _positions[i] - item.Dot.Width / 2;
+            if (dpi > 0)
+            {
+                left = Math.Round(left * dpi) / dpi;
+                dotLeft = Math.Round(dotLeft * dpi) / dpi;
+            }
+            Canvas.SetLeft(item, left);
+            Canvas.SetLeft(item.Dot, dotLeft);
             System.Windows.Controls.Panel.SetZIndex(item, (int)Math.Round(_scales[i] * 10));
         }
         UpdateGlass();
