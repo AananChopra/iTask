@@ -138,6 +138,7 @@ public sealed class MonitorShell : IDisposable
         RECT strip = _dockAppBar?.Reserve(m.Bounds, reserve)
                      ?? new RECT(m.Bounds.Left, m.Bounds.Bottom - reserve, m.Bounds.Right, m.Bounds.Bottom);
 
+        _dock.SetAvailableWidth(m.Bounds.Width / m.Scale);
         var size = _dock.GetWindowSize();
         int dockWidth = Math.Min(m.ToPixels(size.Width), m.Bounds.Width);
         int dockHeight = m.ToPixels(size.Height);

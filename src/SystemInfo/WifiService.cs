@@ -38,19 +38,38 @@ public sealed class WifiService : IDisposable
         }
     }
 
-    public bool HasWifiAdapter => _interface is not null;
+    public bool HasWifiAdapter => CurrentInterface() is not null;
+
+    /// <summary>
+    /// Looked up on each use rather than cached: adapters come and go (USB dongles, a laptop's Wi-Fi
+    /// switched off in Device Manager, docking), and the lookup is cheap.
+    /// </summary>
+    private Guid? CurrentInterface()
+    {
+        if (_client == IntPtr.Zero)
+            return null;
+        try
+        {
+            return _interface = FirstInterface();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"WLAN interface lookup failed: {ex.Message}");
+            return _interface;
+        }
+    }
 
     /// <summary>Asks the adapter to rescan; results show up in <see cref="GetNetworks"/> a moment later.</summary>
     public void RequestScan()
     {
-        if (_client == IntPtr.Zero || _interface is not { } iface)
+        if (_client == IntPtr.Zero || CurrentInterface() is not { } iface)
             return;
         WlanScan(_client, ref iface, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
     }
 
     public WifiScanResult GetNetworks()
     {
-        if (_client == IntPtr.Zero || _interface is not { } iface)
+        if (_client == IntPtr.Zero || CurrentInterface() is not { } iface)
             return new WifiScanResult(Array.Empty<WifiNetwork>(), "No Wi-Fi adapter");
 
         int error = WlanGetAvailableNetworkList(_client, ref iface, 0, IntPtr.Zero, out var list);
@@ -110,7 +129,7 @@ public sealed class WifiService : IDisposable
     /// </summary>
     public bool Connect(WifiNetwork network)
     {
-        if (_client == IntPtr.Zero || _interface is not { } iface || network.ProfileName is null)
+        if (_client == IntPtr.Zero || CurrentInterface() is not { } iface || network.ProfileName is null)
             return false;
         var parameters = new WLAN_CONNECTION_PARAMETERS
         {
@@ -126,7 +145,7 @@ public sealed class WifiService : IDisposable
 
     public void Disconnect()
     {
-        if (_client != IntPtr.Zero && _interface is { } iface)
+        if (_client != IntPtr.Zero && CurrentInterface() is { } iface)
             WlanDisconnect(_client, ref iface, IntPtr.Zero);
     }
 

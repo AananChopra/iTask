@@ -43,10 +43,9 @@ public partial class DockWindow : OverlayWindow
     {
         _settings = settings;
         _runningApps = runningApps;
+        _iconSize = settings.IconSize;
         InitializeComponent();
 
-        Panel.CornerRadius = new CornerRadius(Radius);
-        Sheen.CornerRadius = new CornerRadius(Math.Max(0, Radius - 1));
         if (glass)
         {
             UseGlass();
@@ -62,10 +61,8 @@ public partial class DockWindow : OverlayWindow
         // Sub-pixel icon motion: rounding positions to whole pixels makes moving icons judder.
         Icons.UseLayoutRounding = false;
         Icons.SnapsToDevicePixels = false;
-        Panel.Height = PanelHeight;
         Panel.Margin = new Thickness(0, 0, 0, _settings.BottomMargin);
-        Icons.Height = IconDip;
-        Icons.Margin = new Thickness(0, 0, 0, _settings.BottomMargin + Pad);
+        ApplyMetrics();
 
         AddItem(DockItemView.ForStart(IconDip, MaxScale));
         if (settings.ShowRunningApps)
@@ -82,7 +79,64 @@ public partial class DockWindow : OverlayWindow
 
     // ── Metrics (the design's proportions, derived from the icon size) ───────────────────────
 
-    private double IconDip => _settings.IconSize;
+    /// <summary>Icon size in use: the setting, shrunk (like macOS) when that many icons wouldn't fit.</summary>
+    private double IconDip => _iconSize;
+    private double _iconSize;
+    private double _availableWidth = double.PositiveInfinity; // DIPs across this dock's display
+    private const double MinIconSize = 24;
+    private const double MaxWidthShare = 0.92; // of the display, at rest (magnifying can go wider)
+
+    /// <summary>Tells the dock how wide its display is (DIPs), so it can shrink icons to fit.</summary>
+    public void SetAvailableWidth(double dips)
+    {
+        if (Math.Abs(dips - _availableWidth) < 0.5)
+            return;
+        _availableWidth = dips;
+        FitIcons();
+    }
+
+    private static double RestingWidth(double size, int count) =>
+        count * size + (count - 1) * Math.Max(4, size * 0.08) + 2 * Math.Max(8, size * 0.12) + 2 * SideMargin;
+
+    /// <summary>Largest icon size up to the setting whose resting dock fits; rebuilds icons if it changed.</summary>
+    private bool FitIcons()
+    {
+        double size = _settings.IconSize;
+        int count = Math.Max(1, _items.Count);
+        while (size > MinIconSize && RestingWidth(size, count) > _availableWidth * MaxWidthShare)
+            size -= 2;
+        size = Math.Max(MinIconSize, Math.Min(size, _settings.IconSize));
+        if (Math.Abs(size - _iconSize) < 0.5)
+            return false;
+        _iconSize = size;
+        RebuildItems();
+        return true;
+    }
+
+    private void ApplyMetrics()
+    {
+        Panel.CornerRadius = new CornerRadius(Radius);
+        Sheen.CornerRadius = new CornerRadius(Math.Max(0, Radius - 1));
+        Panel.Height = PanelHeight;
+        Icons.Height = IconDip;
+        Icons.Margin = new Thickness(0, 0, 0, _settings.BottomMargin + Pad);
+    }
+
+    /// <summary>Recreates every icon at the current size (icons are rasterized once at their size).</summary>
+    private void RebuildItems()
+    {
+        foreach (var item in _items)
+        {
+            Icons.Children.Remove(item);
+            Icons.Children.Remove(item.Dot);
+        }
+        _items.Clear();
+        _scales = Array.Empty<double>();
+        ApplyMetrics();
+        AddItem(DockItemView.ForStart(IconDip, MaxScale));
+        SyncItems();
+        ContentChanged?.Invoke(this, EventArgs.Empty);
+    }
     private double Spacing => Math.Max(4, IconDip * 0.08);
     private double Pad => Math.Max(8, IconDip * 0.12);
     private double Radius => Math.Max(12, IconDip * 0.4);
@@ -231,6 +285,8 @@ public partial class DockWindow : OverlayWindow
         }
         // Keep the running-apps order (Start first).
         _items.Sort((a, b) => a.IsStart ? -1 : b.IsStart ? 1 : apps.IndexOf(a.App!).CompareTo(apps.IndexOf(b.App!)));
+        if (FitIcons())
+            return; // rebuilt at a new size (which synced again)
 
         _scales = _items.Select(i => oldScales.TryGetValue(i, out var s) ? s : 1.0).ToArray();
         _positions = CalculatePositions(_scales);

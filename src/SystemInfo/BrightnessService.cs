@@ -25,6 +25,17 @@ public sealed class BrightnessService : IDisposable
         return ddc;
     }
 
+    /// <summary>
+    /// Displays changed: Windows may now give a display name to a different monitor, or a monitor
+    /// may have woken up and started answering DDC/CI, so ask every monitor again.
+    /// </summary>
+    public void RefreshAll()
+    {
+        _panel.Refresh();
+        foreach (var ddc in _external.Values)
+            ddc.Refresh();
+    }
+
     public void Dispose()
     {
         _panel.Dispose();

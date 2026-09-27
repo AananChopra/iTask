@@ -56,7 +56,10 @@ public sealed class ClockService : INotifyPropertyChanged, IDisposable
         var culture = CultureInfo.CurrentCulture;
 
         TimeText = now.ToString(culture.DateTimeFormat.ShortTimePattern, culture);
-        DateText = $"{now.Day}{OrdinalSuffix(now.Day)} {now.ToString("MMMM", culture)}";
+        // "28th September" is English; other languages get their own day-month form ("28 septembre").
+        DateText = culture.TwoLetterISOLanguageName == "en"
+            ? $"{now.Day}{OrdinalSuffix(now.Day)} {now.ToString("MMMM", culture)}"
+            : now.ToString(culture.DateTimeFormat.MonthDayPattern, culture);
         LongDateText = now.ToString(culture.DateTimeFormat.LongDatePattern, culture);
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
 

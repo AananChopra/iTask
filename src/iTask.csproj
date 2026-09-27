@@ -9,6 +9,7 @@
     <RootNamespace>iTask</RootNamespace>
     <AssemblyName>iTask</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\iTask.ico</ApplicationIcon>
     <Version>0.1.0</Version>
     <Product>iTask</Product>
     <Description>macOS-style top bar and floating dock for Windows 11</Description>

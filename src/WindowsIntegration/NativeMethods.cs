@@ -46,6 +46,7 @@ internal static class NativeMethods
     public const uint SWP_SHOWWINDOW = 0x0040;
 
     public static readonly IntPtr HWND_TOPMOST = new(-1);
+    public static readonly IntPtr HWND_NOTOPMOST = new(-2);
 
     // ── Messages ─────────────────────────────────────────────────────────────
     public const int WM_WINDOWPOSCHANGED = 0x0047;

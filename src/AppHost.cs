@@ -29,6 +29,7 @@ public sealed class AppHost : IDisposable
         _displayDebounce.Tick += (_, _) =>
         {
             _displayDebounce.Stop();
+            _services?.Brightness.RefreshAll();
             SyncMonitors();
         };
     }
@@ -54,6 +55,7 @@ public sealed class AppHost : IDisposable
             catch (Exception ex) { Log.Error("Tray host failed to start", ex); }
         }
 
+        Track(new ShowDesktopRepair());
         var theme = Track(new ThemeService(_settings.Appearance));
         var foreground = Track(new ForegroundWatcher());
         var settings = Track(new SettingsService(_settings, theme));
