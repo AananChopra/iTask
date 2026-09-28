@@ -85,14 +85,56 @@ public sealed class AppBar : IDisposable
         SHAppBarMessage(ABM_QUERYPOS, ref data);
         data.rc = Trim(data.rc, thickness);
 
-        // Skipping identical SETPOS calls avoids ping-pong notifications between our two bars.
-        if (_lastRect is { } last && last.Equals(data.rc))
+        // Skipping identical SETPOS calls avoids ping-pong notifications between our two bars. But
+        // only while Windows is really honouring it: after sleep/resume or a display change it can
+        // rebuild the work area without us, and then "unchanged" means "lost".
+        if (_lastRect is { } last && last.Equals(data.rc) && IsHonoured(monitorBounds, data.rc))
             return data.rc;
 
         SHAppBarMessage(ABM_SETPOS, ref data);
         data.rc = Trim(data.rc, thickness);
         _lastRect = data.rc;
+
+        if (thickness > 0 && !IsHonoured(monitorBounds, data.rc) && DateTime.UtcNow - _lastReregister > ReregisterCooldown)
+        {
+            // Our registration itself was dropped (SETPOS on it no longer does anything): start over.
+            _lastReregister = DateTime.UtcNow;
+            Log.Info($"{_edge} app bar reservation was lost; registering again.");
+            ForceReregister();
+            if (IsRegistered)
+            {
+                data = NewData();
+                data.uEdge = (uint)_edge;
+                data.rc = desired;
+                SHAppBarMessage(ABM_QUERYPOS, ref data);
+                data.rc = Trim(data.rc, thickness);
+                SHAppBarMessage(ABM_SETPOS, ref data);
+                data.rc = Trim(data.rc, thickness);
+                _lastRect = data.rc;
+            }
+            if (!IsHonoured(monitorBounds, data.rc))
+            {
+                // Even a fresh registration is ignored: Explorer's own app bar bookkeeping is stuck
+                // (seen after sleep/resume). Whoever owns the taskbar state can shake it loose.
+                Log.Warn($"{_edge} app bar still not honoured after registering again.");
+                ReservationStuck?.Invoke(this, EventArgs.Empty);
+            }
+        }
         return data.rc;
+    }
+
+    /// <summary>Explorer ignores this app bar even after re-registering (its state needs a reset).</summary>
+    public event EventHandler? ReservationStuck;
+
+    private static readonly TimeSpan ReregisterCooldown = TimeSpan.FromSeconds(5);
+    private DateTime _lastReregister = DateTime.MinValue;
+
+    /// <summary>Whether the monitor's work area currently leaves our strip out.</summary>
+    private bool IsHonoured(RECT monitorBounds, RECT strip)
+    {
+        if (strip.Height <= 0 || WorkAreaOf(monitorBounds) is not { } work)
+            return true;
+        return _edge == AppBarEdge.Top ? work.Top >= strip.Bottom : work.Bottom <= strip.Top;
     }
 
     private RECT Strip(RECT m, int thickness) => _edge == AppBarEdge.Top

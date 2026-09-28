@@ -62,6 +62,18 @@ public sealed class TaskbarController : IDisposable
         Log.Info($"Native taskbar hidden (original state=0x{_originalState:X}).");
     }
 
+    /// <summary>
+    /// Briefly puts the taskbar's original auto-hide state back and re-applies ours, which makes
+    /// Explorer rebuild its app bar bookkeeping (its window stays hidden throughout).
+    /// </summary>
+    public void ResetState()
+    {
+        if (!_active)
+            return;
+        SetState(_originalState);
+        Apply();
+    }
+
     /// <summary>Re-applies hiding after Explorer restarts (TaskbarCreated).</summary>
     public void Reapply()
     {

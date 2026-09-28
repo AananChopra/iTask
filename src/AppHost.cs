@@ -42,6 +42,7 @@ public sealed class AppHost : IDisposable
         _messages.TaskbarCreated += OnTaskbarCreated;
         _messages.DisplayChanged += (_, _) => _displayDebounce.Start();
         _messages.WorkAreaChanged += (_, _) => _shells.ForEach(s => s.RequestLayout());
+        Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
         _explorerTaskbar = WindowUtils.FindExplorerTaskbar();
         if (_settings.Shell.HideNativeTaskbar)
@@ -120,9 +121,56 @@ public sealed class AppHost : IDisposable
         foreach (var monitor in targets)
         {
             var shell = new MonitorShell(monitor, _settings, _services!);
+            shell.ReservationStuck += OnReservationStuck;
             _shells.Add(shell);
             shell.Start();
         }
+    }
+
+    /// <summary>
+    /// Waking from sleep can rebuild displays and the work area without telling app bars. Check
+    /// our reservations again once things have settled (twice: displays can take a while to return).
+    /// </summary>
+    private void OnPowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+    {
+        if (e.Mode != Microsoft.Win32.PowerModes.Resume)
+            return;
+        // Raised on a system events thread; the timers must live on the UI thread.
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            foreach (var delay in new[] { 2, 8 })
+            {
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(delay) };
+                timer.Tick += (_, _) =>
+                {
+                    timer.Stop();
+                    if (_disposed)
+                        return;
+                    Log.Info("Resumed from sleep; re-checking layout.");
+                    _displayDebounce.Stop();
+                    _displayDebounce.Start();
+                };
+                timer.Start();
+            }
+        });
+    }
+
+    private DateTime _lastTaskbarReset = DateTime.MinValue;
+
+    /// <summary>
+    /// Explorer ignores our reserved strips even after re-registering (seen after sleep). Restarting
+    /// iTask fixed it, and the part that matters is re-applying the taskbar's auto-hide state, which
+    /// makes Explorer rebuild its app bar bookkeeping; do just that, then lay out again.
+    /// </summary>
+    private void OnReservationStuck(object? sender, EventArgs e)
+    {
+        if (_disposed || DateTime.UtcNow - _lastTaskbarReset < TimeSpan.FromSeconds(30))
+            return;
+        _lastTaskbarReset = DateTime.UtcNow;
+        Log.Info("Resetting the taskbar's state so Explorer honours our reserved space again.");
+        _taskbar.ResetState();
+        foreach (var shell in _shells)
+            shell.ForceReregister();
     }
 
     /// <summary>Settings changed: recreate every display's bars from the updated settings.</summary>
@@ -167,6 +215,7 @@ public sealed class AppHost : IDisposable
         _disposed = true;
 
         _displayDebounce.Stop();
+        Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         foreach (var shell in _shells)
         {
             try { shell.Dispose(); }

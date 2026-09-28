@@ -215,6 +215,17 @@ internal static class NativeMethods
     [DllImport("shcore.dll")]
     public static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromRect(ref RECT rect, uint flags);
+
+    /// <summary>The current work area of the monitor that contains <paramref name="r"/> (null if unknown).</summary>
+    public static RECT? WorkAreaOf(RECT r)
+    {
+        var hmon = MonitorFromRect(ref r, 2 /* MONITOR_DEFAULTTONEAREST */);
+        var info = new MONITORINFOEX { cbSize = Marshal.SizeOf<MONITORINFOEX>() };
+        return hmon != IntPtr.Zero && GetMonitorInfo(hmon, ref info) ? info.rcWork : null;
+    }
+
     // ── AppBar (shell32) ─────────────────────────────────────────────────────
     public const uint ABM_NEW = 0x00;
     public const uint ABM_REMOVE = 0x01;

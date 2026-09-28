@@ -75,11 +75,18 @@ public sealed class MonitorShell : IDisposable
         bar.Register();
         bar.PositionChanged += (_, _) => RequestLayout();
         bar.FullScreenChanged += (_, fullscreen) => OnFullScreenChanged(fullscreen);
+        bar.ReservationStuck += (_, _) => ReservationStuck?.Invoke(this, EventArgs.Empty);
         return bar;
     }
 
+    /// <summary>Explorer keeps ignoring this display's reserved strip; the host can reset its state.</summary>
+    public event EventHandler? ReservationStuck;
+
     /// <summary>Explorer restarted: app bar registrations were lost with it.</summary>
-    public void OnExplorerRestarted()
+    public void OnExplorerRestarted() => ForceReregister();
+
+    /// <summary>Registers our app bars from scratch and reserves their space again.</summary>
+    public void ForceReregister()
     {
         _topAppBar?.ForceReregister();
         _dockAppBar?.ForceReregister();
