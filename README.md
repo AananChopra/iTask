@@ -47,9 +47,22 @@ every display gets its own top bar and dock. each dock hides based on what's on 
 
 everything gets saved to `%APPDATA%\iTask\settings.json` if you ever wanna poke at it by hand (restart itask after editing it yourself).
 
-## running it
+## installing it
 
-no installer yet, that's coming. for now you build it yourself. you need windows 11 and the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
+grab the installer and run it. that's it, no .net or anything else needed.
+
+- `iTask-Setup-x.y.z-x64.exe` for pretty much every windows pc
+- `iTask-Setup-x.y.z-arm64.exe` for arm laptops (snapdragon and friends)
+
+it installs just for you (no admin prompt), puts itask in your start menu, and asks if you want it to start with windows. it shows up in settings > apps like anything else, so uninstalling is the normal way. uninstalling puts the windows taskbar back first, and your settings stick around in case you come back.
+
+heads up: windows might show a blue "windows protected your pc" box the first time. that's because the installer isn't signed with a paid certificate yet. hit **more info**, then **run anyway**.
+
+installing a newer version over an old one just works. if itask is running, setup closes it properly first.
+
+## building it yourself
+
+you need windows 11 and the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
 ```
 git clone https://github.com/AananChopra/iTask.git
@@ -59,13 +72,13 @@ dotnet build src/iTask.csproj -c Release
 src\bin\Release\net8.0-windows10.0.19041.0\iTask.exe
 ```
 
-want a standalone copy that runs on a pc without .net installed?
+wanna build the installers too? install [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`), then:
 
 ```
-dotnet publish src/iTask.csproj -c Release -r win-x64 --self-contained -o publish
+.\installer\build.ps1
 ```
 
-on an arm laptop (snapdragon and friends) use `win-arm64` instead of `win-x64`. then just run `publish\iTask.exe`.
+that publishes itask for x64 and arm64 and drops both installers in `artifacts\`. add `-Arch x64` if you only want one.
 
 ### commands
 
@@ -105,11 +118,14 @@ src/
   ShellIntegration/   hiding the taskbar, appbars, tray hosting
   UI/                 glass windows, theming, styles, the settings window
   Configuration/      settings file + start with windows
+installer/
+  iTask.iss           the inno setup script
+  build.ps1           publish + build the installers in one go
 ```
 
 ## what's next
 
-- a proper installer (one exe, sets itself up, runs on startup if you want)
+- signing the installer so windows stops side-eyeing it
 - whatever breaks next lol
 
 ## credits
