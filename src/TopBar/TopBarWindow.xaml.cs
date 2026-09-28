@@ -27,29 +27,37 @@ public partial class TopBarWindow : OverlayWindow
         InitializeComponent();
         DataContext = services;
         BarContent.Height = settings.Height;
-
-        if (settings.ShowRunningApps)
-            RunningApps.ItemsSource = services.RunningApps.Apps;
-        else
-            RunningApps.Visibility = Visibility.Collapsed;
-
-        if (!settings.ShowTrayIcons || services.Tray is null)
-            TrayButton.Visibility = Visibility.Collapsed;
-
-        // Visibility bindings handle "no battery" / "no audio device"; settings can hide them outright.
-        if (!settings.ShowNetwork) NetworkButton.Visibility = Visibility.Collapsed;
-        if (!settings.ShowVolume) VolumeButton.Visibility = Visibility.Collapsed;
-        if (!settings.ShowBattery) BatteryButton.Visibility = Visibility.Collapsed;
         BrightnessButton.DataContext = _brightness;
-        UpdateBrightnessButton();
-        _brightness.PropertyChanged += OnBrightnessChanged;
 
-        DateLabel.Visibility = settings.ShowDate ? Visibility.Visible : Visibility.Collapsed;
-        TimeLabel.Visibility = settings.ShowTime ? Visibility.Visible : Visibility.Collapsed;
-        DateLabel.Margin = settings.ShowTime ? new Thickness(0, 0, 10, 0) : new Thickness(0);
-        if (!settings.ShowDate && !settings.ShowTime)
-            ClockButton.Visibility = Visibility.Collapsed;
+        ApplySettings();
+        // Some items also depend on the hardware being there (a battery, an audio device, a dimmable display).
+        _brightness.PropertyChanged += OnStatusChanged;
+        services.Audio.PropertyChanged += OnStatusChanged;
+        services.Battery.PropertyChanged += OnStatusChanged;
     }
+
+    /// <summary>Shows or hides each item per the settings (and the hardware); safe to call again after a change.</summary>
+    public void ApplySettings()
+    {
+        var s = _settings;
+        RunningApps.ItemsSource = s.ShowRunningApps ? _services.RunningApps.Apps : null;
+        RunningApps.Visibility = Shown(s.ShowRunningApps);
+        TrayButton.Visibility = Shown(s.ShowTrayIcons && _services.Tray is not null);
+        NetworkButton.Visibility = Shown(s.ShowNetwork);
+        VolumeButton.Visibility = Shown(s.ShowVolume && _services.Audio.HasDevice);
+        BatteryButton.Visibility = Shown(s.ShowBattery && _services.Battery.HasBattery);
+        BrightnessButton.Visibility = Shown(s.ShowBrightness && _brightness.HasBrightness);
+
+        DateLabel.Visibility = Shown(s.ShowDate);
+        TimeLabel.Visibility = Shown(s.ShowTime);
+        DateLabel.Margin = s.ShowTime ? new Thickness(0, 0, 10, 0) : new Thickness(0);
+        ClockButton.Visibility = Shown(s.ShowDate || s.ShowTime);
+    }
+
+    private static Visibility Shown(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
+
+    private void OnStatusChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
+        Dispatcher.BeginInvoke(ApplySettings);
 
     protected override BackdropKind GetBackdrop(ThemeService theme) => theme.TopBarBackdrop;
 
@@ -80,33 +88,43 @@ public partial class TopBarWindow : OverlayWindow
         {
             var flyout = new TrayFlyout(icons);
             // Chevron points up while the menu is open.
-            flyout.Loaded += (_, _) => TrayChevron.Text = "";
-            flyout.Unloaded += (_, _) => TrayChevron.Text = "";
+            flyout.Loaded += (_, _) => RotateChevron(180);
+            flyout.Unloaded += (_, _) => RotateChevron(0);
             return flyout;
         }, TrayFlyout.WidthFor(icons.Cast<object>().Count()));
     }
 
-    private void ToggleMenu(string key, FrameworkElement anchor, Func<FrameworkElement> content, double width)
+    /// <summary>Tray arrow points down when closed and turns to point up while its menu is open.</summary>
+    private void RotateChevron(double angle)
+    {
+        var animation = new System.Windows.Media.Animation.DoubleAnimation(angle, TimeSpan.FromMilliseconds(iTask.Utilities.SystemAnimations.Enabled ? 200 : 0))
+        {
+            EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
+        };
+        TrayChevronRotation.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, animation);
+    }
+
+    private void ToggleMenu(object key, FrameworkElement anchor, Func<FrameworkElement> content, double width)
     {
         NativeMethods.GetWindowRect(Handle, out var bar);
         // Keyed per bar, so the same menu on another display opens there instead of toggling closed.
         _services.Flyouts.Toggle((this, key), anchor, bar.Bottom, content, width);
     }
 
-    protected override void OnClosed(EventArgs e)
+    protected override void OnPreviewMouseUp(MouseButtonEventArgs e)
     {
-        _brightness.PropertyChanged -= OnBrightnessChanged;
-        base.OnClosed(e);
+        base.OnPreviewMouseUp(e);
+        // After this release's Click has run (which may have switched to another menu).
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, _services.Flyouts.OnBarMouseReleased);
     }
 
-    private void OnBrightnessChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
-        Dispatcher.BeginInvoke(UpdateBrightnessButton);
-
-    // Hidden on displays that can't be dimmed (no WMI panel, no DDC/CI support).
-    private void UpdateBrightnessButton() =>
-        BrightnessButton.Visibility = _settings.ShowBrightness && _brightness.HasBrightness
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+    protected override void OnClosed(EventArgs e)
+    {
+        _brightness.PropertyChanged -= OnStatusChanged;
+        _services.Audio.PropertyChanged -= OnStatusChanged;
+        _services.Battery.PropertyChanged -= OnStatusChanged;
+        base.OnClosed(e);
+    }
 
     private void AppButton_Click(object sender, RoutedEventArgs e)
     {
@@ -117,7 +135,7 @@ public partial class TopBarWindow : OverlayWindow
     private void AppButton_RightClick(object sender, MouseButtonEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: RunningApp app } element)
-            AppContextMenu.Show(app, element, PlacementMode.Bottom);
+            ToggleMenu(("app-windows", app), element, () => new AppWindowsFlyout(app), AppWindowsFlyout.MenuWidth);
         e.Handled = true;
     }
 

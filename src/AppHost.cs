@@ -60,7 +60,7 @@ public sealed class AppHost : IDisposable
         var theme = Track(new ThemeService(_settings.Appearance));
         var foreground = Track(new ForegroundWatcher());
         var settings = Track(new SettingsService(_settings, theme));
-        settings.Changed += (_, _) => RebuildShells();
+        settings.Changed += (_, _) => ApplySettings();
         _services = new ShellServices(
             theme,
             Track(new ClockService()),
@@ -173,19 +173,17 @@ public sealed class AppHost : IDisposable
             shell.ForceReregister();
     }
 
-    /// <summary>Settings changed: recreate every display's bars from the updated settings.</summary>
-    private void RebuildShells()
+    /// <summary>Settings changed: update every display's bars in place.</summary>
+    private void ApplySettings()
     {
         if (_disposed)
             return;
         _services!.Flyouts.Close();
         foreach (var shell in _shells)
         {
-            try { shell.Dispose(); }
-            catch (Exception ex) { Log.Error("Shell dispose failed", ex); }
+            try { shell.ApplySettings(); }
+            catch (Exception ex) { Log.Error("Applying settings failed", ex); }
         }
-        _shells.Clear();
-        SyncMonitors();
         Log.Info("Settings applied.");
     }
 

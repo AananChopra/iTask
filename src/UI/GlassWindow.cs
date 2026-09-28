@@ -181,6 +181,44 @@ public sealed class GlassWindow : OverlayWindow
         _borderShape.CornerRadius = new Vector2(Math.Max(0, _radius - stroke / 2));
     }
 
+    /// <summary>Sets the glass's opacity and scale (around <paramref name="origin"/>) immediately.</summary>
+    public void SetAppearance(float opacity, float scale, Vector2 origin)
+    {
+        if (_root is null)
+            return;
+        _root.CenterPoint = new Vector3(origin.X * _shape.Width, origin.Y * _shape.Height, 0);
+        _root.Opacity = opacity;
+        _root.Scale = new Vector3(scale, scale, 1);
+    }
+
+    /// <summary>
+    /// Fades/scales the whole glass (blur, tint, border) around <paramref name="origin"/> (0–1 within
+    /// the shape), on the compositor. Pairs with the same animation on the content window.
+    /// </summary>
+    public void Animate(float fromOpacity, float toOpacity, float fromScale, float toScale, Vector2 origin, TimeSpan duration, bool easeIn)
+    {
+        if (_root is null)
+            return;
+        var c = CompositionHost.Compositor;
+        _root.CenterPoint = new Vector3(origin.X * _shape.Width, origin.Y * _shape.Height, 0);
+        // Same curves as WPF's CubicEase (EaseOut when appearing, EaseIn when going away).
+        var ease = easeIn
+            ? c.CreateCubicBezierEasingFunction(new Vector2(0.32f, 0f), new Vector2(0.67f, 0f))
+            : c.CreateCubicBezierEasingFunction(new Vector2(0.33f, 1f), new Vector2(0.68f, 1f));
+
+        var opacity = c.CreateScalarKeyFrameAnimation();
+        opacity.InsertKeyFrame(0, fromOpacity);
+        opacity.InsertKeyFrame(1, toOpacity, ease);
+        opacity.Duration = duration;
+        _root.StartAnimation("Opacity", opacity);
+
+        var scale = c.CreateVector3KeyFrameAnimation();
+        scale.InsertKeyFrame(0, new Vector3(fromScale, fromScale, 1));
+        scale.InsertKeyFrame(1, new Vector3(toScale, toScale, 1), ease);
+        scale.Duration = duration;
+        _root.StartAnimation("Scale", scale);
+    }
+
     private static WinColor ToWin(System.Windows.Media.Color c) => WinColor.FromArgb(c.A, c.R, c.G, c.B);
 }
 

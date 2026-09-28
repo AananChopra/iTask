@@ -218,6 +218,14 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern IntPtr MonitorFromRect(ref RECT rect, uint flags);
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr WindowFromPoint(POINT point);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+
+    public const uint GA_ROOT = 2;
+
     /// <summary>The current work area of the monitor that contains <paramref name="r"/> (null if unknown).</summary>
     public static RECT? WorkAreaOf(RECT r)
     {

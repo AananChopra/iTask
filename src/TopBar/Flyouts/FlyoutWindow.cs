@@ -1,6 +1,8 @@
+using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using iTask.UI;
 
 namespace iTask.TopBar.Flyouts;
@@ -14,10 +16,15 @@ public interface IFlyoutContent
     event EventHandler? ContentChanged;
 }
 
-/// <summary>A macOS-style menu dropdown under the top bar: rounded frosted glass, never activated.</summary>
+/// <summary>A macOS-style menu: rounded frosted glass, never activated, fading/growing in from its item.</summary>
 public sealed class FlyoutWindow : OverlayWindow
 {
+    private const float StartScale = 0.95f;
+    private static readonly TimeSpan OpenDuration = TimeSpan.FromMilliseconds(180);
+    private static readonly TimeSpan CloseDuration = TimeSpan.FromMilliseconds(120);
+
     private readonly Border _root;
+    private readonly ScaleTransform _scale = new(1, 1);
 
     public FlyoutWindow(FrameworkElement content, double width)
     {
@@ -31,6 +38,7 @@ public sealed class FlyoutWindow : OverlayWindow
             Padding = new Thickness(5, 5, 5, 6),
             Width = width,
             Child = content,
+            RenderTransform = _scale,
         };
         Content = _root;
     }
@@ -46,5 +54,52 @@ public sealed class FlyoutWindow : OverlayWindow
     {
         _root.Measure(new Size(_root.Width, double.PositiveInfinity));
         return _root.DesiredSize;
+    }
+
+    private Point? _pendingIn;
+
+    /// <summary>Fades and grows in from <paramref name="origin"/> (0–1 within the menu: where its item is).</summary>
+    public void AnimateIn(Point origin)
+    {
+        // Start invisible, and only animate once the first frame is really on screen: the window
+        // stays cloaked for its first frames, which would otherwise eat a third of the animation.
+        _root.Opacity = 0;
+        _root.RenderTransformOrigin = origin;
+        _scale.ScaleX = _scale.ScaleY = StartScale;
+        Glass?.SetAppearance(0, StartScale, new Vector2((float)origin.X, (float)origin.Y));
+        _pendingIn = origin;
+    }
+
+    protected override void OnContentRendered(EventArgs e)
+    {
+        base.OnContentRendered(e); // schedules the uncloak at Render priority
+        if (_pendingIn is not { } origin)
+            return;
+        _pendingIn = null;
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render,
+            () => Run(0, 1, StartScale, 1, origin, OpenDuration, easeIn: false, done: null));
+    }
+
+    /// <summary>Fades out (and shrinks a touch towards its origin), then calls <paramref name="done"/>.</summary>
+    public void AnimateOut(Action done)
+    {
+        _root.IsHitTestVisible = false;
+        Run(_root.Opacity, 0, 1, 0.98f, _root.RenderTransformOrigin, CloseDuration, easeIn: true, done);
+    }
+
+    private void Run(double fromOpacity, double toOpacity, float fromScale, float toScale, Point origin, TimeSpan duration, bool easeIn, Action? done)
+    {
+        var ease = new CubicEase { EasingMode = easeIn ? EasingMode.EaseIn : EasingMode.EaseOut };
+        _root.RenderTransformOrigin = origin;
+
+        var opacity = new DoubleAnimation(fromOpacity, toOpacity, duration) { EasingFunction = ease };
+        if (done is not null)
+            opacity.Completed += (_, _) => done();
+        _root.BeginAnimation(OpacityProperty, opacity);
+        _scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(fromScale, toScale, duration) { EasingFunction = ease });
+        _scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(fromScale, toScale, duration) { EasingFunction = ease });
+
+        Glass?.Animate((float)fromOpacity, (float)toOpacity, fromScale, toScale,
+            new Vector2((float)origin.X, (float)origin.Y), duration, easeIn);
     }
 }

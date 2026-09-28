@@ -28,7 +28,7 @@ public sealed class DockAutoHide : IDisposable
     private MonitorInfo _monitor;
     private RECT _home;           // where the dock sits when shown (physical px)
     private bool _enabled;
-    private bool _suspended;      // e.g. a full-screen app owns the monitor
+    private bool _fullScreen;     // a full-screen app owns the monitor: hidden, no edge reveal
     private bool _wantHidden;     // foreground app is maximized
     private bool _revealed;       // shown because of the cursor, despite _wantHidden
     private DateTime _edgeSince = DateTime.MaxValue;
@@ -40,10 +40,13 @@ public sealed class DockAutoHide : IDisposable
     private readonly Stopwatch _animClock = new();
     private bool _animating;
 
-    public DockAutoHide(DockWindow dock, ForegroundWatcher foreground, MonitorInfo monitor)
+    private readonly iTask.TopBar.Flyouts.FlyoutHost _flyouts;
+
+    public DockAutoHide(DockWindow dock, ForegroundWatcher foreground, iTask.TopBar.Flyouts.FlyoutHost flyouts, MonitorInfo monitor)
     {
         _dock = dock;
         _foreground = foreground;
+        _flyouts = flyouts;
         _monitor = monitor;
         // Only runs while the dock is auto-hidden or revealed; GetCursorPos is cheap.
         _cursorTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(16) };
@@ -80,9 +83,14 @@ public sealed class DockAutoHide : IDisposable
         Apply();
     }
 
-    public void SetSuspended(bool suspended)
+    /// <summary>
+    /// A full-screen app (a game, a video) took the monitor: slide away in every dock mode and stay
+    /// away, even at the bottom edge, until it leaves full screen.
+    /// </summary>
+    public void SetFullScreen(bool fullScreen)
     {
-        _suspended = suspended;
+        _fullScreen = fullScreen;
+        _revealed = false;
         Evaluate();
     }
 
@@ -90,17 +98,11 @@ public sealed class DockAutoHide : IDisposable
 
     public void Evaluate()
     {
-        if (_suspended)
+        if (_fullScreen)
         {
-            _cursorTimer.Stop();
-            _revealed = false;
-            StopAnimation();
-            _offset = 1;
-            _dock.Hide();
-            return;
+            _wantHidden = true;
         }
-
-        if (!_enabled)
+        else if (!_enabled)
         {
             _wantHidden = false;
         }
@@ -126,7 +128,7 @@ public sealed class DockAutoHide : IDisposable
 
     private void UpdateCursorTimer()
     {
-        if (_wantHidden && _enabled && !_suspended)
+        if (_wantHidden && !_fullScreen)
         {
             if (!_cursorTimer.IsEnabled)
             {
@@ -167,8 +169,9 @@ public sealed class DockAutoHide : IDisposable
             return;
         }
 
-        // Revealed: stay while the cursor is on the dock, in the gap below it, or at the edge.
-        if (IsCursorOverDock(p) || atEdge)
+        // Revealed: stay while the cursor is on the dock, in the gap below it, or at the edge, or
+        // while a menu is open (e.g. a dock icon's menu, which sits above the dock).
+        if (IsCursorOverDock(p) || atEdge || _flyouts.IsOpen)
         {
             _leftSince = DateTime.MaxValue;
             return;
@@ -222,7 +225,9 @@ public sealed class DockAutoHide : IDisposable
 
     private void OnRendering(object? sender, EventArgs e)
     {
-        double t = _animMs <= 0 ? 1 : Math.Min(1, _animClock.Elapsed.TotalMilliseconds / _animMs);
+        double t = _animMs <= 0 || !iTask.Utilities.SystemAnimations.Enabled
+            ? 1
+            : Math.Min(1, _animClock.Elapsed.TotalMilliseconds / _animMs);
         // Ease-out when sliding in, ease-in when sliding away.
         double eased = _animTo < _animFrom ? 1 - Math.Pow(1 - t, 3) : t * t * t;
         _offset = _animFrom + (_animTo - _animFrom) * eased;
@@ -252,8 +257,7 @@ public sealed class DockAutoHide : IDisposable
         int travel = _monitor.Bounds.Bottom - _home.Top;
         int dy = (int)Math.Round(travel * _offset);
         _dock.SetBounds(new RECT(_home.Left, _home.Top + dy, _home.Right, _home.Bottom + dy));
-        if (!_suspended)
-            _dock.ShowPassive();
+        _dock.ShowPassive();
     }
 
     public void Dispose()

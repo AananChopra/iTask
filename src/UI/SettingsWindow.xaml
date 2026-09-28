@@ -35,11 +35,23 @@
             <!-- General -->
             <TextBlock Text="General" Style="{StaticResource SettingsSectionText}" />
             <Border Style="{StaticResource SettingsCard}">
-                <DockPanel Style="{StaticResource SettingsRow}">
-                    <ToggleButton x:Name="StartupSwitch" DockPanel.Dock="Right" Style="{StaticResource FlyoutSwitchStyle}"
-                                  VerticalAlignment="Center" Checked="Startup_Changed" Unchecked="Startup_Changed" />
-                    <TextBlock Text="Start iTask when Windows starts" VerticalAlignment="Center" />
-                </DockPanel>
+                <StackPanel>
+                    <DockPanel Style="{StaticResource SettingsRow}">
+                        <ToggleButton x:Name="StartupSwitch" DockPanel.Dock="Right" Style="{StaticResource FlyoutSwitchStyle}"
+                                      VerticalAlignment="Center" Checked="Startup_Changed" Unchecked="Startup_Changed" />
+                        <TextBlock Text="Start iTask when Windows starts" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <Border Style="{StaticResource SettingsRowSeparator}" />
+                    <DockPanel Style="{StaticResource SettingsRow}" Margin="14,8">
+                        <ToggleButton x:Name="FullScreenSwitch" DockPanel.Dock="Right" Style="{StaticResource FlyoutSwitchStyle}"
+                                      VerticalAlignment="Center" Checked="Changed" Unchecked="Changed" />
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="Hide the bars over full-screen apps" />
+                            <TextBlock FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Text="Games, videos and other full-screen apps get the whole screen." />
+                        </StackPanel>
+                    </DockPanel>
+                </StackPanel>
             </Border>
 
             <!-- Dock -->

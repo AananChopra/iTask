@@ -46,6 +46,7 @@ public partial class SettingsWindow : Window
     private void Load()
     {
         StartupSwitch.IsChecked = StartupRegistration.IsEnabled;
+        FullScreenSwitch.IsChecked = S.TopBar.HideForFullScreen;
         (S.Dock.Visibility switch
         {
             DockVisibility.AlwaysVisible => ModeAlways,
@@ -90,6 +91,7 @@ public partial class SettingsWindow : Window
             : DockVisibility.Smart;
         S.Dock.IconSize = Math.Round(IconSizeSlider.Value);
         S.Dock.Magnification = MagnifySwitch.IsChecked == true ? Math.Round(MagnifySlider.Value, 1) : 1.0;
+        S.TopBar.HideForFullScreen = FullScreenSwitch.IsChecked == true;
         foreach (var (toggle, apply) in _topBarSwitches)
             apply(toggle.IsChecked == true);
         UpdateLabels();

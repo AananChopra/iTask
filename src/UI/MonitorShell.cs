@@ -19,6 +19,7 @@ public sealed class MonitorShell : IDisposable
     private readonly TopBarWindow _topBar;
     private readonly DockWindow _dock;
     private readonly DockAutoHide _dockAutoHide;
+    private readonly TopBarAutoHide _topBarAutoHide;
     private AppBar? _topAppBar;
     private AppBar? _dockAppBar;
     private bool _layoutPending;
@@ -30,9 +31,10 @@ public sealed class MonitorShell : IDisposable
         _settings = settings;
         _services = services;
         _topBar = new TopBarWindow(settings.TopBar, services, monitor.DeviceName, glass: settings.Appearance.TopBarBackdrop == BackdropKind.Blur);
-        _dock = new DockWindow(settings.Dock, services.RunningApps, settings.Appearance.DockGlass);
+        _dock = new DockWindow(settings.Dock, services.RunningApps, services.Flyouts, settings.Appearance.DockGlass);
         _dock.ContentChanged += (_, _) => RequestLayout();
-        _dockAutoHide = new DockAutoHide(_dock, services.Foreground, monitor);
+        _dockAutoHide = new DockAutoHide(_dock, services.Foreground, services.Flyouts, monitor);
+        _topBarAutoHide = new TopBarAutoHide(_topBar);
     }
 
     public MonitorInfo Monitor { get; private set; }
@@ -77,6 +79,34 @@ public sealed class MonitorShell : IDisposable
         bar.FullScreenChanged += (_, fullscreen) => OnFullScreenChanged(fullscreen);
         bar.ReservationStuck += (_, _) => ReservationStuck?.Invoke(this, EventArgs.Empty);
         return bar;
+    }
+
+    /// <summary>
+    /// Settings changed: update the bars in place (no teardown, so nothing blinks).
+    /// </summary>
+    public void ApplySettings()
+    {
+        _topBar.ApplySettings();
+        _dock.ApplySettings();
+
+        // Dock mode: only an always-visible dock reserves screen space.
+        bool reserve = !DockHides && _settings.Dock.ReserveSpace;
+        if (reserve && _dockAppBar is null)
+        {
+            _dockAppBar = CreateAppBar(_dock, AppBarEdge.Bottom);
+        }
+        else if (!reserve && _dockAppBar is not null)
+        {
+            _dockAppBar.Dispose();
+            _dockAppBar = null;
+        }
+        _dockAutoHide.AlwaysHide = _settings.Dock.Visibility == DockVisibility.AutoHide;
+        _dockAutoHide.IsEnabled = DockHides;
+
+        // Turned "hide over full-screen apps" off while one is up: bring the bars back now.
+        if (_hiddenForFullscreen && !_settings.TopBar.HideForFullScreen)
+            OnFullScreenChanged(false);
+        Layout();
     }
 
     /// <summary>Explorer keeps ignoring this display's reserved strip; the host can reset its state.</summary>
@@ -135,7 +165,7 @@ public sealed class MonitorShell : IDisposable
             topRect = _topAppBar?.Reserve(m.Bounds, topHeight)
                       ?? new RECT(m.Bounds.Left, m.Bounds.Top, m.Bounds.Right, m.Bounds.Top + topHeight);
         }
-        _topBar.SetBounds(topRect);
+        _topBarAutoHide.SetHome(topRect);
         if (m.IsPrimary)
             _services.Tray?.ReportExplorerTaskbar(m);
 
@@ -158,17 +188,16 @@ public sealed class MonitorShell : IDisposable
 
     private void OnFullScreenChanged(bool fullscreen)
     {
-        // Explorer can send this for the desktop itself; confirm before hiding.
-        bool hide = fullscreen && WindowUtils.IsForegroundFullscreen(Monitor.Bounds);
+        // Explorer can send this for the desktop itself; confirm before hiding. Full-screen apps
+        // (games, videos, an app's own full screen mode) get the whole display: both bars slide
+        // away until it leaves full screen. Or they stay on top, if the setting says so.
+        bool hide = fullscreen && _settings.TopBar.HideForFullScreen && WindowUtils.IsForegroundFullscreen(Monitor.Bounds);
         if (hide == _hiddenForFullscreen)
             return;
         _hiddenForFullscreen = hide;
         Log.Info(hide ? "Fullscreen app detected; hiding bars." : "Fullscreen app gone; showing bars.");
-        if (hide)
-            _topBar.Hide();
-        else
-            _topBar.ShowPassive();
-        _dockAutoHide.SetSuspended(hide);
+        _topBarAutoHide.SetFullScreen(hide);
+        _dockAutoHide.SetFullScreen(hide);
         if (!hide)
             Layout();
     }
@@ -187,6 +216,7 @@ public sealed class MonitorShell : IDisposable
         _services.Foreground.Activated -= OnAppActivated;
         _services.RunningApps.AppActivated -= OnAppActivated;
         _dockAutoHide.Dispose();
+        _topBarAutoHide.Dispose();
         _topAppBar?.Dispose();
         _dockAppBar?.Dispose();
         _topBar.Close();

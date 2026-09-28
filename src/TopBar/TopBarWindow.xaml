@@ -52,30 +52,33 @@
             <!-- Right: hidden tray icons (dropdown), then system status, then date & time -->
             <StackPanel Grid.Column="2" Orientation="Horizontal">
 
-                <Button x:Name="TrayButton" Style="{StaticResource BarButtonStyle}" Click="TrayButton_Click" ToolTip="Show hidden icons">
-                    <TextBlock x:Name="TrayChevron" Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="11" />
+                <Button x:Name="TrayButton" Style="{StaticResource BarButtonStyle}" Click="TrayButton_Click">
+                    <TextBlock x:Name="TrayChevron" Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="11"
+                               RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.RenderTransform>
+                            <RotateTransform x:Name="TrayChevronRotation" />
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
                 </Button>
                 <Button x:Name="NetworkButton" Style="{StaticResource BarButtonStyle}" Click="NetworkButton_Click"
-                        DataContext="{Binding Network}" ToolTip="{Binding Description}">
+                        DataContext="{Binding Network}">
                     <local:NetworkIcon Bars="{Binding SignalBars}" IsConnected="{Binding IsConnected}"
                                        IsWired="{Binding IsWired}" HasInternet="{Binding HasInternet}" />
                 </Button>
 
                 <Button x:Name="VolumeButton" Style="{StaticResource BarButtonStyle}" Click="VolumeButton_Click"
                         MouseWheel="VolumeButton_MouseWheel"
-                        DataContext="{Binding Audio}" ToolTip="{Binding Description}"
-                        Visibility="{Binding HasDevice, Converter={StaticResource BoolToVisibility}}">
+                        DataContext="{Binding Audio}">
                     <local:VolumeIcon Level="{Binding Volume}" IsMuted="{Binding IsMuted}" />
                 </Button>
 
                 <Button x:Name="BrightnessButton" Style="{StaticResource BarButtonStyle}" Click="BrightnessButton_Click"
-                        ToolTip="{Binding Description}">
+                       >
                     <TextBlock Text="&#xE706;" FontFamily="{StaticResource IconFont}" FontSize="14" />
                 </Button>
 
                 <Button x:Name="BatteryButton" Style="{StaticResource BarButtonStyle}" Click="BatteryButton_Click"
-                        DataContext="{Binding Battery}" ToolTip="{Binding Description}"
-                        Visibility="{Binding HasBattery, Converter={StaticResource BoolToVisibility}}">
+                        DataContext="{Binding Battery}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{Binding Percent, StringFormat={}{0}%}" Margin="0,0,6,0" VerticalAlignment="Center" />
                         <local:BatteryIcon Percent="{Binding Percent}" IsCharging="{Binding IsCharging}"
@@ -86,7 +89,7 @@
 
                 <!-- Date & time: opens the calendar -->
                 <Button x:Name="ClockButton" Style="{StaticResource BarButtonStyle}" Margin="4,3,2,3" Click="ClockButton_Click"
-                        DataContext="{Binding Clock}" ToolTip="{Binding LongDateText}">
+                        DataContext="{Binding Clock}">
                     <StackPanel x:Name="ClockPanel" Orientation="Horizontal">
                         <TextBlock x:Name="DateLabel" Text="{Binding DateText}" Margin="0,0,10,0" />
                         <TextBlock x:Name="TimeLabel" Text="{Binding TimeText}" />

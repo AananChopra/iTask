@@ -45,6 +45,11 @@ public sealed class TopBarSettings
     public bool ShowVolume { get; set; } = true;
     public bool ShowBrightness { get; set; } = true;
     public bool ShowBattery { get; set; } = true;
+    /// <summary>
+    /// Slide the bars away over full-screen apps (the screen edges bring them back). Off: they stay
+    /// on top of full-screen apps too, covering the top and bottom of them.
+    /// </summary>
+    public bool HideForFullScreen { get; set; } = true;
     public bool ShowDate { get; set; } = true;
     public bool ShowTime { get; set; } = true;
 }

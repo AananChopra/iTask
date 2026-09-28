@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using iTask.Configuration;
 using iTask.ShellIntegration;
+using iTask.TopBar.Flyouts;
 using iTask.UI;
 using iTask.WindowsIntegration;
 
@@ -39,10 +40,13 @@ public partial class DockWindow : OverlayWindow
     private RECT _bounds;
     private DockItemView? _pressed;
 
-    public DockWindow(DockSettings settings, RunningAppsService runningApps, bool glass)
+    private readonly FlyoutHost _flyouts;
+
+    public DockWindow(DockSettings settings, RunningAppsService runningApps, FlyoutHost flyouts, bool glass)
     {
         _settings = settings;
         _runningApps = runningApps;
+        _flyouts = flyouts;
         _iconSize = settings.IconSize;
         InitializeComponent();
 
@@ -101,16 +105,28 @@ public partial class DockWindow : OverlayWindow
     /// <summary>Largest icon size up to the setting whose resting dock fits; rebuilds icons if it changed.</summary>
     private bool FitIcons()
     {
-        double size = _settings.IconSize;
-        int count = Math.Max(1, _items.Count);
-        while (size > MinIconSize && RestingWidth(size, count) > _availableWidth * MaxWidthShare)
-            size -= 2;
-        size = Math.Max(MinIconSize, Math.Min(size, _settings.IconSize));
+        double size = FittedIconSize();
         if (Math.Abs(size - _iconSize) < 0.5)
             return false;
         _iconSize = size;
         RebuildItems();
         return true;
+    }
+
+    private double FittedIconSize()
+    {
+        double size = _settings.IconSize;
+        int count = Math.Max(1, _items.Count);
+        while (size > MinIconSize && RestingWidth(size, count) > _availableWidth * MaxWidthShare)
+            size -= 2;
+        return Math.Max(MinIconSize, Math.Min(size, _settings.IconSize));
+    }
+
+    /// <summary>Icon size or magnification changed in settings: redraw the icons for them, in place.</summary>
+    public void ApplySettings()
+    {
+        _iconSize = FittedIconSize();
+        RebuildItems(); // icons are rasterized for their size and peak magnification
     }
 
     private void ApplyMetrics()
@@ -462,8 +478,20 @@ public partial class DockWindow : OverlayWindow
     private void OnItemRightClick(object sender, MouseButtonEventArgs e)
     {
         if (sender is DockItemView { App: { } app } item)
-            AppContextMenu.Show(app, item, PlacementMode.Top);
+        {
+            // Menus sit just above the dock (or the magnified icon, if it rises higher), centered on it.
+            int iconTop = (int)item.PointToScreen(new Point(0, 0)).Y;
+            _flyouts.Toggle((this, app), item, Math.Min(PanelScreenRect.Top, iconTop), () => new AppWindowsFlyout(app),
+                AppWindowsFlyout.MenuWidth, FlyoutPlacement.Above);
+        }
         e.Handled = true;
+    }
+
+    protected override void OnPreviewMouseUp(MouseButtonEventArgs e)
+    {
+        base.OnPreviewMouseUp(e);
+        // After this release's own handling (which may have opened this icon's menu instead).
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, _flyouts.OnBarMouseReleased);
     }
 
     protected override void OnClosed(EventArgs e)
