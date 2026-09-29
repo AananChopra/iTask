@@ -25,13 +25,29 @@ public static class Log
                 Directory.CreateDirectory(AppPaths.LocalDirectory);
                 var file = new FileInfo(AppPaths.LogFile);
                 if (file.Exists && file.Length > MaxBytes)
-                    File.Move(file.FullName, file.FullName + ".old", overwrite: true);
+                    Rotate(file.FullName);
                 File.AppendAllText(AppPaths.LogFile, line + Environment.NewLine);
             }
         }
         catch
         {
             // Logging must never take the shell down.
+        }
+    }
+
+    /// <summary>
+    /// Moves the full log to .old. If that fails (something has one of the files open), start the
+    /// log over instead; otherwise every later write would retry, fail and be lost.
+    /// </summary>
+    private static void Rotate(string path)
+    {
+        try
+        {
+            File.Move(path, path + ".old", overwrite: true);
+        }
+        catch
+        {
+            using var truncate = new FileStream(path, FileMode.Truncate, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
         }
     }
 }
