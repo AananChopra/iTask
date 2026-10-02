@@ -24,6 +24,7 @@ public sealed class MonitorShell : IDisposable
     private AppBar? _dockAppBar;
     private bool _layoutPending;
     private bool _hiddenForFullscreen;
+    private DispatcherTimer? _fullscreenWatchdog;
 
     public MonitorShell(MonitorInfo monitor, AppSettings settings, ShellServices services)
     {
@@ -62,21 +63,33 @@ public sealed class MonitorShell : IDisposable
         _dock.DpiChanged += (_, _) => RequestLayout();
         _services.Theme.Changed += OnThemeChanged;
         _services.Foreground.Activated += OnAppActivated;
+        _services.Foreground.Changed += OnForegroundChanged;
         _services.RunningApps.AppActivated += OnAppActivated;
+
+        // Safety net for what events miss (a game switching modes, a window resizing itself).
+        _fullscreenWatchdog = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+        _fullscreenWatchdog.Tick += (_, _) => EvaluateFullscreen();
+        _fullscreenWatchdog.Start();
     }
 
     private void OnAppActivated(object? sender, EventArgs e)
     {
+        // Look first: lifting the bars above a full-screen game is exactly what must not happen.
+        EvaluateFullscreen();
+        if (_hiddenForFullscreen)
+            return;
         _topBar.BringToTop();
         _dock.BringToTop();
     }
+
+    private void OnForegroundChanged(object? sender, EventArgs e) => EvaluateFullscreen();
 
     private AppBar CreateAppBar(OverlayWindow window, AppBarEdge edge)
     {
         var bar = new AppBar(window.Source!, edge);
         bar.Register();
         bar.PositionChanged += (_, _) => RequestLayout();
-        bar.FullScreenChanged += (_, fullscreen) => OnFullScreenChanged(fullscreen);
+        bar.FullScreenChanged += (_, _) => EvaluateFullscreen();
         bar.ReservationStuck += (_, _) => ReservationStuck?.Invoke(this, EventArgs.Empty);
         return bar;
     }
@@ -104,8 +117,7 @@ public sealed class MonitorShell : IDisposable
         _dockAutoHide.IsEnabled = DockHides;
 
         // Turned "hide over full-screen apps" off while one is up: bring the bars back now.
-        if (_hiddenForFullscreen && !_settings.TopBar.HideForFullScreen)
-            OnFullScreenChanged(false);
+        EvaluateFullscreen();
         Layout();
     }
 
@@ -186,16 +198,18 @@ public sealed class MonitorShell : IDisposable
         Log.Info($"Layout on {m.DeviceName} @{m.Scale:0.##}x: top={topRect} dock={dockRect}");
     }
 
-    private void OnFullScreenChanged(bool fullscreen)
+    /// <summary>
+    /// Full-screen apps (games, videos, an app's own full screen mode) get the whole display: both
+    /// bars slide away until it leaves full screen. Or they stay on top, if the setting says so.
+    /// We judge by the foreground window itself; Explorer's notification is only a nudge to look.
+    /// </summary>
+    private void EvaluateFullscreen()
     {
-        // Explorer can send this for the desktop itself; confirm before hiding. Full-screen apps
-        // (games, videos, an app's own full screen mode) get the whole display: both bars slide
-        // away until it leaves full screen. Or they stay on top, if the setting says so.
-        bool hide = fullscreen && _settings.TopBar.HideForFullScreen && WindowUtils.IsForegroundFullscreen(Monitor.Bounds);
+        bool hide = _settings.TopBar.HideForFullScreen && WindowUtils.IsFullscreenOn(Monitor.Handle);
         if (hide == _hiddenForFullscreen)
             return;
         _hiddenForFullscreen = hide;
-        Log.Info(hide ? "Fullscreen app detected; hiding bars." : "Fullscreen app gone; showing bars.");
+        Log.Info($"{(hide ? "Fullscreen app detected; hiding bars" : "Fullscreen app gone; showing bars")} on {Monitor.DeviceName}.");
         _topBarAutoHide.SetFullScreen(hide);
         _dockAutoHide.SetFullScreen(hide);
         if (!hide)
@@ -214,7 +228,9 @@ public sealed class MonitorShell : IDisposable
     {
         _services.Theme.Changed -= OnThemeChanged;
         _services.Foreground.Activated -= OnAppActivated;
+        _services.Foreground.Changed -= OnForegroundChanged;
         _services.RunningApps.AppActivated -= OnAppActivated;
+        _fullscreenWatchdog?.Stop();
         _dockAutoHide.Dispose();
         _topBarAutoHide.Dispose();
         _topAppBar?.Dispose();

@@ -33,6 +33,9 @@ public sealed class ForegroundWatcher : IDisposable
         "Shell_TrayWnd",                       // our tray host / Explorer's hidden taskbar
     };
 
+    /// <summary>Shell surfaces (Start, Task View, Alt+Tab, menus…) that are in front but aren't an app.</summary>
+    public static bool IsTransientClass(string windowClass) => TransientClasses.Contains(windowClass);
+
     private static readonly HashSet<string> DesktopClasses = new(StringComparer.Ordinal)
     {
         "Progman",

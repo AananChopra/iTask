@@ -1,6 +1,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Windows.Threading;
 using iTask.Utilities;
 using iTask.WindowsIntegration;
 using static iTask.WindowsIntegration.NativeMethods;
@@ -24,6 +25,7 @@ public sealed class TaskbarController : IDisposable
 
     private readonly WinEventDelegate _hookProc; // keep the delegate alive while hooked
     private IntPtr _hook;
+    private DispatcherTimer? _enforcer;
     private int _originalState;
     private bool _active;
 
@@ -87,6 +89,7 @@ public sealed class TaskbarController : IDisposable
             return;
         _active = false;
 
+        _enforcer?.Stop();
         Unhook();
         foreach (var tray in FindTrayWindows())
         {
@@ -121,10 +124,27 @@ public sealed class TaskbarController : IDisposable
     private void Apply()
     {
         SetState(_originalState | ABS_AUTOHIDE);
-        // iTask draws a top bar and dock on every display, so every taskbar goes.
-        foreach (var tray in FindTrayWindows())
-            ShowWindow(tray, SW_HIDE);
+        HideTrays();
         Hook();
+
+        // The show hook misses some cases (a secondary taskbar Explorer recreates after a display
+        // mode change, or reveals when the cursor touches the screen edge), so also keep checking.
+        if (_enforcer is null)
+        {
+            _enforcer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
+            _enforcer.Tick += (_, _) => HideTrays();
+        }
+        _enforcer.Start();
+    }
+
+    /// <summary>iTask draws a top bar and dock on every display, so every taskbar goes.</summary>
+    private static void HideTrays()
+    {
+        foreach (var tray in FindTrayWindows())
+        {
+            if (IsWindowVisible(tray))
+                ShowWindow(tray, SW_HIDE);
+        }
     }
 
     private void Hook()

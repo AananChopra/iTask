@@ -60,23 +60,37 @@ public static class WindowUtils
     }
 
     /// <summary>
-    /// True when the foreground window covers the whole monitor (games, video players, F11 browsers).
-    /// Used to double-check ABN_FULLSCREENAPP, which Explorer occasionally sends for the desktop itself.
+    /// True when the foreground window is a full-screen app on this monitor: it covers the whole
+    /// display (games, video players, F11 browsers). Explorer's own notification for this is not
+    /// enough: it never comes for a game running in a framed window that is merely as big as the
+    /// screen (or bigger), and it can be late or wrong, so we look at the window ourselves.
+    /// Ordinary maximized windows don't count, even though their frame overhangs the display.
     /// </summary>
-    public static bool IsForegroundFullscreen(RECT monitorBounds)
+    public static bool IsFullscreenOn(IntPtr monitor)
     {
         var fg = GetForegroundWindow();
-        if (fg == IntPtr.Zero || fg == GetShellWindow() || fg == GetDesktopWindow())
+        if (fg == IntPtr.Zero || fg == GetShellWindow() || fg == GetDesktopWindow() || IsOwnWindow(fg))
+            return false;
+        if (!IsWindowVisible(fg) || IsIconic(fg))
+            return false;
+        if (MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST) != monitor)
             return false;
 
         var cls = GetClassName(fg);
-        if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd")
+        if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd" ||
+            ForegroundWatcher.IsTransientClass(cls)) // Start, Task View, Alt+Tab, menus
             return false;
 
-        if (!GetWindowRect(fg, out var r))
+        var info = new MONITORINFOEX { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFOEX>() };
+        if (!GetMonitorInfo(monitor, ref info) || !GetWindowRect(fg, out var r))
+            return false;
+        var bounds = info.rcMonitor;
+        bool covers = r.Left <= bounds.Left && r.Top <= bounds.Top && r.Right >= bounds.Right && r.Bottom >= bounds.Bottom;
+        if (!covers)
             return false;
 
-        return r.Left <= monitorBounds.Left && r.Top <= monitorBounds.Top &&
-               r.Right >= monitorBounds.Right && r.Bottom >= monitorBounds.Bottom;
+        // A maximized window with a title bar is just a maximized window.
+        long style = GetWindowLongPtr(fg, GWL_STYLE).ToInt64();
+        return !(IsZoomed(fg) && (style & WS_CAPTION) == WS_CAPTION);
     }
 }

@@ -27,6 +27,7 @@ internal static class NativeMethods
     public const int GWL_EXSTYLE = -20;
 
     public const long WS_POPUP = 0x80000000L;
+    public const long WS_CAPTION = 0x00C00000L;
     public const long WS_EX_TOPMOST = 0x00000008L;
     public const long WS_EX_TOOLWINDOW = 0x00000080L;
     public const long WS_EX_APPWINDOW = 0x00040000L;
