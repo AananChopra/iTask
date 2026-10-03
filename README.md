@@ -32,6 +32,7 @@ it sits on top of explorer instead of replacing it, so start, alt+tab, win+r, no
 - when it's hidden, shove your cursor against the bottom edge of the screen and it pops back up
 - click to focus or minimize, right click to pick a window or close it
 - got a ton of apps open or a small screen? the icons shrink so everything fits
+- playing a game or watching something fullscreen? both bars get out of the way, even if the game is in a framed window that's as big as the screen. alt+tab out and they come right back
 
 ### multiple displays
 
@@ -94,6 +95,7 @@ that publishes itask for x64 and arm64 and drops both installers in `artifacts\`
 - **windows stuck "always on top" after win+d.** windows 11 sometimes brings windows back from show desktop as always-on-top, which buries everything else under them. itask quietly undoes that. anything you pinned on purpose with powertoys is left alone
 - **no brightness icon on one of your monitors.** that monitor doesn't do ddc/ci (some tvs, usb/displaylink docks, a few cheap panels), or it's switched off in the monitor's own menu
 - **some app won't come back from the dock.** apps running as admin can ignore normal apps like itask, that's a windows security thing. the on-screen keyboard has a workaround so that one works
+- **bars froze or menus won't open.** windows has a hard limit on how many drawing objects an app can hold, and once that's hit the app can't draw anymore. itask keeps an eye on its own count and restarts itself in a few seconds (the windows taskbar flashes for a moment) before it gets there. if it ever happens, look for `Health:` lines in the log, they say what was going on
 - **logs** live at `%LOCALAPPDATA%\iTask\iTask.log`, that's the first place to look
 
 ## how it plays with explorer
