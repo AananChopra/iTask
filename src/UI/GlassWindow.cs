@@ -43,6 +43,7 @@ public sealed class GlassWindow : OverlayWindow
     private RECT _shape;
     private float _radius;
     private float _scale = 1;
+    private float _slide;   // extra downward offset of the glass inside its window (physical px)
 
     public GlassWindow(string title)
     {
@@ -158,6 +159,18 @@ public sealed class GlassWindow : OverlayWindow
         UpdateShape();
     }
 
+    /// <summary>
+    /// Slides the glass down by <paramref name="dy"/> px inside its window (the window clips it).
+    /// Changes one compositor property, no window move, so it can run every frame.
+    /// </summary>
+    public void SetSlide(float dy)
+    {
+        if (Math.Abs(dy - _slide) < 0.01f)
+            return;
+        _slide = dy;
+        UpdateShape();
+    }
+
     /// <summary>Glass covering exactly <paramref name="bounds"/>.</summary>
     public void SetShape(RECT bounds, float radius, float scale = 1) => SetShape(bounds, bounds, radius, scale);
 
@@ -166,7 +179,7 @@ public sealed class GlassWindow : OverlayWindow
         if (_root is null || _clipShape is null || _borderShape is null || _border is null || _shape.Width <= 0)
             return;
         // Visuals live in the window's physical-pixel space.
-        var offset = new Vector3(_shape.Left - _window.Left, _shape.Top - _window.Top, 0);
+        var offset = new Vector3(_shape.Left - _window.Left, _shape.Top - _window.Top + _slide, 0);
         var size = new Vector2(_shape.Width, _shape.Height);
         _root.Offset = offset;
         _root.Size = size;

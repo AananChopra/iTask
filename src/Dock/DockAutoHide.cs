@@ -16,7 +16,7 @@ namespace iTask.Dock;
 public sealed class DockAutoHide : IDisposable
 {
     private static readonly TimeSpan RevealDwell = TimeSpan.FromMilliseconds(60);
-    private static readonly TimeSpan HideDelay = TimeSpan.FromMilliseconds(450);
+    private static readonly TimeSpan HideDelay = TimeSpan.FromMilliseconds(250);
     private const double SlideInMs = 190;
     private const double SlideOutMs = 170;
     private const int EdgeTolerancePx = 2;
@@ -220,6 +220,7 @@ public sealed class DockAutoHide : IDisposable
         {
             _animating = true;
             CompositionTarget.Rendering += OnRendering;
+            iTask.Utilities.FrameTiming.Begin();
         }
     }
 
@@ -243,12 +244,37 @@ public sealed class DockAutoHide : IDisposable
             _offset = _animFrom + (_animTo - _animFrom) * eased;
             if (t >= 1)
                 StopAnimation();
+            long before = _perf.ElapsedTicks;
             Apply();
+            if (PerfLogging)
+                RecordFrame(before);
         }
         finally
         {
             _inRendering = false;
         }
+    }
+
+    // Set ITASK_PERF=1 to log slide timing: how often frames come and how long moving the window takes.
+    private static readonly bool PerfLogging = Environment.GetEnvironmentVariable("ITASK_PERF") == "1";
+    private readonly Stopwatch _perf = Stopwatch.StartNew();
+    private readonly List<(double gap, double apply)> _frames = new();
+    private long _lastFrame;
+
+    private void RecordFrame(long applyStart)
+    {
+        long now = _perf.ElapsedTicks;
+        double ms(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
+        _frames.Add((_lastFrame == 0 ? 0 : ms(applyStart - _lastFrame), ms(now - applyStart)));
+        _lastFrame = applyStart;
+        if (_animating)
+            return;
+        var gaps = _frames.Skip(1).Select(f => f.gap).ToList();
+        if (gaps.Count > 0)
+            iTask.Utilities.Log.Info($"Dock slide perf: {_frames.Count} frames, gap avg {gaps.Average():0.0} ms max {gaps.Max():0.0}; " +
+                $"move avg {_frames.Average(f => f.apply):0.00} ms max {_frames.Max(f => f.apply):0.00}");
+        _frames.Clear();
+        _lastFrame = 0;
     }
 
     private void StopAnimation()
@@ -257,6 +283,7 @@ public sealed class DockAutoHide : IDisposable
             return;
         _animating = false;
         CompositionTarget.Rendering -= OnRendering;
+        iTask.Utilities.FrameTiming.End();
     }
 
     private void Apply()
@@ -268,10 +295,12 @@ public sealed class DockAutoHide : IDisposable
             _dock.Hide();
             return;
         }
-        // Travel from the home position to just below the bottom edge of the monitor.
+        // Travel from the home position to just below the bottom edge of the monitor. The window
+        // stays at home (its bottom is the screen edge); its contents slide and get clipped there.
         int travel = _monitor.Bounds.Bottom - _home.Top;
         int dy = (int)Math.Round(travel * _offset);
-        _dock.SetBounds(new RECT(_home.Left, _home.Top + dy, _home.Right, _home.Bottom + dy));
+        _dock.SetBounds(_home);
+        _dock.SetSlide(dy, sliding: _animating || dy != 0);
         _dock.ShowPassive();
     }
 

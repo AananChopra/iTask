@@ -62,6 +62,8 @@ public partial class DockWindow : OverlayWindow
             Sheen.Visibility = Visibility.Collapsed;
         }
 
+        Root.RenderTransform = _slideTransform;
+
         // Sub-pixel icon motion: rounding positions to whole pixels makes moving icons judder.
         Icons.UseLayoutRounding = false;
         Icons.SnapsToDevicePixels = false;
@@ -235,6 +237,25 @@ public partial class DockWindow : OverlayWindow
         Glass.SetShape(glassWindow, shape, radius, dpi, alreadyPlaced: true);
     }
 
+    private readonly TranslateTransform _slideTransform = new();
+    private bool _sliding;
+
+    /// <summary>
+    /// Slides the dock's contents (icons and glass) <paramref name="dy"/> px down inside the window,
+    /// which stays put and clips them at the screen edge. Used for showing and hiding: moving the
+    /// windows themselves cost ~4 ms a frame (WPF flushes its render thread on every move), most of
+    /// a 165 Hz frame; a transform and a compositor offset cost almost nothing.
+    /// </summary>
+    public void SetSlide(int dy, bool sliding)
+    {
+        bool placementChanged = sliding != _sliding;
+        _sliding = sliding;
+        _slideTransform.Y = dy / VisualTreeHelper.GetDpi(this).DpiScaleY;
+        if (placementChanged)
+            UpdateGlass(); // while sliding the glass window reaches the screen edge (see TryGetGlassPlacement)
+        Glass?.SetSlide(dy);
+    }
+
     /// <summary>The glass follows the body (not the whole window), including while it widens.</summary>
     protected override void UpdateGlass()
     {
@@ -267,6 +288,10 @@ public partial class DockWindow : OverlayWindow
         {
             window = shape;
         }
+        // Sliding: the glass travels down inside its window, so the window reaches the bottom of
+        // the dock window (the screen edge), where both the glass and the icons get clipped.
+        if (_sliding)
+            window.Bottom = Math.Max(window.Bottom, _bounds.Bottom);
         return true;
     }
 
@@ -381,6 +406,7 @@ public partial class DockWindow : OverlayWindow
         _animating = true;
         _frameClock.Restart();
         CompositionTarget.Rendering += OnFrame;
+        iTask.Utilities.FrameTiming.Begin();
     }
 
     private bool _inFrame;
@@ -429,6 +455,7 @@ public partial class DockWindow : OverlayWindow
             Array.Copy(targetScales, _scales, _scales.Length);
             Array.Copy(targetPositions, _positions, _positions.Length);
             CompositionTarget.Rendering -= OnFrame;
+            iTask.Utilities.FrameTiming.End();
             _animating = false;
             LogFrameStats();
         }
@@ -528,6 +555,11 @@ public partial class DockWindow : OverlayWindow
     protected override void OnClosed(EventArgs e)
     {
         CompositionTarget.Rendering -= OnFrame;
+        if (_animating)
+        {
+            _animating = false;
+            iTask.Utilities.FrameTiming.End();
+        }
         _runningApps.Apps.CollectionChanged -= OnAppsChanged;
         foreach (var item in _items)
             item.Untrack();

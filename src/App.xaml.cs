@@ -30,6 +30,15 @@ public partial class App : Application
     private bool _restarting;
     private bool _restartDeclined;
 
+    static App()
+    {
+        // WPF paces animation at 60 fps unless told otherwise, which looks choppy on a high refresh
+        // rate display (165 Hz laptops are common). Ask for up to 240; WPF still won't render
+        // faster than the display.
+        System.Windows.Media.Animation.Timeline.DesiredFrameRateProperty.OverrideMetadata(
+            typeof(System.Windows.Media.Animation.Timeline), new FrameworkPropertyMetadata { DefaultValue = 240 });
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);

@@ -51,6 +51,7 @@ public sealed class TopBarAutoHide : IDisposable
         {
             _animating = true;
             CompositionTarget.Rendering += OnRendering;
+            FrameTiming.Begin();
         }
     }
 
@@ -74,6 +75,7 @@ public sealed class TopBarAutoHide : IDisposable
             {
                 _animating = false;
                 CompositionTarget.Rendering -= OnRendering;
+                FrameTiming.End();
             }
             Apply();
         }
@@ -100,6 +102,10 @@ public sealed class TopBarAutoHide : IDisposable
     public void Dispose()
     {
         if (_animating)
+        {
+            _animating = false;
             CompositionTarget.Rendering -= OnRendering;
+            FrameTiming.End();
+        }
     }
 }
