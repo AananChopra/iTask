@@ -54,19 +54,33 @@ public sealed class TopBarAutoHide : IDisposable
         }
     }
 
+    private bool _inRendering;
+
     private void OnRendering(object? sender, EventArgs e)
     {
-        double duration = SlideMs * Math.Abs(_animTo - _animFrom);
-        double t = duration <= 0 || !SystemAnimations.Enabled ? 1 : Math.Min(1, _animClock.Elapsed.TotalMilliseconds / duration);
-        // Ease-out coming in, ease-in going away.
-        double eased = _animTo < _animFrom ? 1 - Math.Pow(1 - t, 3) : t * t * t;
-        _offset = _animFrom + (_animTo - _animFrom) * eased;
-        if (t >= 1)
+        // WPF raises this synchronously from inside window moves, including Apply()'s own; see
+        // DockAutoHide.OnRendering. Nested calls are ignored.
+        if (_inRendering)
+            return;
+        _inRendering = true;
+        try
         {
-            _animating = false;
-            CompositionTarget.Rendering -= OnRendering;
+            double duration = SlideMs * Math.Abs(_animTo - _animFrom);
+            double t = duration <= 0 || !SystemAnimations.Enabled ? 1 : Math.Min(1, _animClock.Elapsed.TotalMilliseconds / duration);
+            // Ease-out coming in, ease-in going away.
+            double eased = _animTo < _animFrom ? 1 - Math.Pow(1 - t, 3) : t * t * t;
+            _offset = _animFrom + (_animTo - _animFrom) * eased;
+            if (t >= 1)
+            {
+                _animating = false;
+                CompositionTarget.Rendering -= OnRendering;
+            }
+            Apply();
         }
-        Apply();
+        finally
+        {
+            _inRendering = false;
+        }
     }
 
     private void Apply()

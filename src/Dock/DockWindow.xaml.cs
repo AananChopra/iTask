@@ -143,6 +143,7 @@ public partial class DockWindow : OverlayWindow
     {
         foreach (var item in _items)
         {
+            item.Untrack();
             Icons.Children.Remove(item);
             Icons.Children.Remove(item.Dot);
         }
@@ -206,11 +207,19 @@ public partial class DockWindow : OverlayWindow
 
     public override void SetBounds(RECT r)
     {
+        bool unchanged = _bounds.Equals(r);
         _bounds = r;
         NoteBounds(r);
         if (Glass is null || !TryGetGlassPlacement(out var glassWindow, out var shape, out float radius, out float dpi))
         {
-            NativeMethods.SetWindowPos(Handle, NativeMethods.HWND_TOPMOST, r.Left, r.Top, r.Width, r.Height, NativeMethods.SWP_NOACTIVATE);
+            if (!unchanged)
+                NativeMethods.SetWindowPos(Handle, NativeMethods.HWND_TOPMOST, r.Left, r.Top, r.Width, r.Height, NativeMethods.SWP_NOACTIVATE);
+            return;
+        }
+        if (unchanged)
+        {
+            // The dock window stays where it is (it already is); only the glass might differ.
+            Glass.SetShape(glassWindow, shape, radius, dpi);
             return;
         }
 
@@ -289,6 +298,7 @@ public partial class DockWindow : OverlayWindow
 
         foreach (var gone in _items.Where(i => !i.IsStart && !apps.Contains(i.App!)).ToList())
         {
+            gone.Untrack();
             _items.Remove(gone);
             Icons.Children.Remove(gone);
             Icons.Children.Remove(gone.Dot);
@@ -296,7 +306,7 @@ public partial class DockWindow : OverlayWindow
         foreach (var app in apps.Where(a => _items.All(i => i.App != a)))
         {
             var view = DockItemView.ForApp(app, IconDip, MaxScale);
-            app.PropertyChanged += (_, _) => Dispatcher.BeginInvoke(view.Refresh);
+            view.Track(app, () => Dispatcher.BeginInvoke(view.Refresh));
             AddItem(view);
         }
         // Keep the running-apps order (Start first).
@@ -372,7 +382,27 @@ public partial class DockWindow : OverlayWindow
         CompositionTarget.Rendering += OnFrame;
     }
 
+    private bool _inFrame;
+
     private void OnFrame(object? sender, EventArgs e)
+    {
+        // WPF runs a render pass (and so this event) synchronously inside every window move or
+        // resize, including the ones ApplyFrame itself causes by moving the glass. Re-entering
+        // would move the window again from inside its own move, over and over.
+        if (_inFrame)
+            return;
+        _inFrame = true;
+        try
+        {
+            RunFrame();
+        }
+        finally
+        {
+            _inFrame = false;
+        }
+    }
+
+    private void RunFrame()
     {
         // Exponential approach toward the target, in real time so it feels the same at any refresh
         // rate. (The design's 0.2 / 0.12 per 60 Hz frame is τ ≈ 75 / 130 ms, which felt sluggish.)
@@ -498,6 +528,8 @@ public partial class DockWindow : OverlayWindow
     {
         CompositionTarget.Rendering -= OnFrame;
         _runningApps.Apps.CollectionChanged -= OnAppsChanged;
+        foreach (var item in _items)
+            item.Untrack();
         base.OnClosed(e);
     }
 }

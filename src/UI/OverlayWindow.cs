@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using iTask.Configuration;
+using iTask.Utilities;
 using iTask.WindowsIntegration;
 using static iTask.WindowsIntegration.NativeMethods;
 
@@ -160,10 +161,16 @@ public class OverlayWindow : Window
     }
 
     private RECT? _bounds;
+    private long _dpiWindowStart;
+    private int _dpiFixes;
 
     /// <summary>Moves/resizes the window (physical pixels) and keeps it in the topmost band.</summary>
     public virtual void SetBounds(RECT r)
     {
+        // WPF handles every move/resize with a render-target update (and a synchronous render pass),
+        // so moving a window to where it already is only costs.
+        if (_bounds is { } current && current.Equals(r))
+            return;
         _bounds = r;
         SetWindowPos(Handle, HWND_TOPMOST, r.Left, r.Top, r.Width, r.Height, SWP_NOACTIVATE);
         UpdateGlass();
@@ -195,12 +202,29 @@ public class OverlayWindow : Window
             handled = true;
             return new IntPtr(MA_NOACTIVATE);
         }
+        if (msg is WM_WINDOWPOSCHANGED or WM_SIZE or WM_DPICHANGED)
+            MessageStats.Count(Title, msg == WM_WINDOWPOSCHANGED ? "move" : msg == WM_SIZE ? "size" : "dpi");
         if (msg == WM_DPICHANGED && _bounds is { } b)
         {
             // Moving onto a display with a different scale makes Windows (and WPF) resize us by the
             // DPI ratio. Our bounds are already exact physical pixels, so put them back afterwards.
-            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, () =>
-                SetWindowPos(Handle, HWND_TOPMOST, b.Left, b.Top, b.Width, b.Height, SWP_NOACTIVATE));
+            // Rate-limited: if putting the window back keeps changing its DPI again, stop fighting
+            // (each round trip costs graphics objects) and let the next layout settle it.
+            var now = Environment.TickCount64;
+            if (now - _dpiWindowStart > 1000)
+            {
+                _dpiWindowStart = now;
+                _dpiFixes = 0;
+            }
+            if (++_dpiFixes <= 4)
+            {
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, () =>
+                    SetWindowPos(Handle, HWND_TOPMOST, b.Left, b.Top, b.Width, b.Height, SWP_NOACTIVATE));
+            }
+            else if (_dpiFixes == 5)
+            {
+                Log.Warn($"{Title}: DPI changed repeatedly within a second; not repositioning again for now.");
+            }
         }
         if (msg == WM_NCACTIVATE && wParam == IntPtr.Zero && _backdrop == BackdropKind.Acrylic)
         {

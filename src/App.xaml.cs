@@ -108,8 +108,9 @@ public partial class App : Application
     {
         if (_restarting)
             return;
-        // A fresh instance that breaks again straight away would only flicker in a loop; stay put.
-        if (_isRestart && DateTime.UtcNow - _startedAt < TimeSpan.FromMinutes(2))
+        // A fresh instance that breaks again straight away would only flicker in a loop; stay put
+        // (for half a minute: after waking from sleep the displays can take a while to settle).
+        if (_isRestart && DateTime.UtcNow - _startedAt < TimeSpan.FromSeconds(30))
         {
             if (!_restartDeclined)
                 Log.Error($"Restart wanted ({reason}) but iTask only just restarted; not restarting again yet.");

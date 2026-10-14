@@ -28,6 +28,8 @@ public sealed class HealthMonitor : IDisposable
     private DateTime _lastSurgeLog = DateTime.MinValue;
     private int _previousGdi = -1;
     private int _reportedGdiStep;
+    private string _lastMessages = "";
+    private readonly Stopwatch _uptime = Stopwatch.StartNew();
     private bool _disposed;
 
     /// <summary>Raised on the UI thread while iTask should restart; the argument says why.</summary>
@@ -55,11 +57,17 @@ public sealed class HealthMonitor : IDisposable
             bool surging = _previousGdi >= 0 && gdi - _previousGdi >= SurgeStep;
             _previousGdi = gdi;
 
+            // Window messages handled since the last check (per window: moves, resizes, DPI changes).
+            string messages = MessageStats.Drain();
+            string earlierMessages = _lastMessages;
+            _lastMessages = messages;
+
             if (surging && DateTime.UtcNow - _lastSurgeLog > TimeSpan.FromSeconds(30))
             {
                 _lastSurgeLog = DateTime.UtcNow;
                 Log.Warn($"Health: GDI surge, gdi={gdi} user={user}; last {_history.Count}s: {string.Join(",", _history)}; " +
-                         $"by type:{GdiBreakdown(self)}\n  front: {DescribeFront()}\n  windows: {DescribeOwnWindows()}");
+                         $"by type:{GdiBreakdown(self)}\n  front: {DescribeFront()}\n  windows: {DescribeOwnWindows()}" +
+                         $"\n  messages in the last second: {messages}\n  the second before: {earlierMessages}");
             }
             else if (DateTime.UtcNow - _lastReport >= ReportInterval || gdi / 1000 > _reportedGdiStep)
             {
@@ -70,11 +78,17 @@ public sealed class HealthMonitor : IDisposable
                          (gdi >= 1000 ? $"; by type:{GdiBreakdown(self)}" : ""));
             }
 
+            // A surge is the start of a runaway (it has gone from ~170 to the 10,000 limit in seconds,
+            // and even when it stops short WPF's windows are left unable to draw), so restart at once.
+            // The first seconds after startup are skipped: the windows are still being created.
+            bool startedUp = _uptime.Elapsed > TimeSpan.FromSeconds(20);
+            string? reason = null;
             if (gdi > RestartThreshold || user > RestartThreshold)
-            {
-                var reason = $"GDI/USER objects near the Windows limit (gdi={gdi}, user={user})";
+                reason = $"GDI/USER objects near the Windows limit (gdi={gdi}, user={user})";
+            else if (surging && startedUp)
+                reason = $"GDI objects surged to {gdi} within a second";
+            if (reason is not null)
                 Application.Current?.Dispatcher.BeginInvoke(() => Unhealthy?.Invoke(this, reason));
-            }
         }
         catch (Exception ex)
         {

@@ -25,6 +25,10 @@ public sealed class MonitorShell : IDisposable
     private bool _layoutPending;
     private bool _hiddenForFullscreen;
     private DispatcherTimer? _fullscreenWatchdog;
+    private DispatcherTimer? _fullscreenRecheck;
+    private long _fullscreenSince;      // when a full-screen window was first seen (0 = none pending)
+    private const long FullscreenSteadyMs = 400;
+    private bool _disposed;
 
     public MonitorShell(MonitorInfo monitor, AppSettings settings, ShellServices services)
     {
@@ -149,12 +153,15 @@ public sealed class MonitorShell : IDisposable
         _topBar.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
             _layoutPending = false;
-            Layout();
+            if (!_disposed) // a layout queued before the display went away must not touch closed windows
+                Layout();
         });
     }
 
     private void Layout()
     {
+        if (_disposed)
+            return;
         var m = Monitor;
 
         // Top bar: full-width strip reserved from the work area.
@@ -205,9 +212,47 @@ public sealed class MonitorShell : IDisposable
     /// </summary>
     private void EvaluateFullscreen()
     {
-        bool hide = _settings.TopBar.HideForFullScreen && WindowUtils.IsFullscreenOn(Monitor.Handle);
-        if (hide == _hiddenForFullscreen)
+        if (_disposed)
             return;
+        bool fullscreen = _settings.TopBar.HideForFullScreen && WindowUtils.IsFullscreenOn(Monitor.Handle);
+
+        if (!fullscreen)
+        {
+            _fullscreenSince = 0;
+            _fullscreenRecheck?.Stop();
+            if (_hiddenForFullscreen)
+                SetFullscreen(false);
+            return;
+        }
+        if (_hiddenForFullscreen)
+            return;
+
+        // Windows pass through screen-sized states for a moment (a picker or dialog appearing, an app
+        // switching, a window changing size); sliding the bars away for those is a visible flicker.
+        // Hide only once it has held steady.
+        long now = Environment.TickCount64;
+        if (_fullscreenSince == 0)
+            _fullscreenSince = now;
+        if (now - _fullscreenSince >= FullscreenSteadyMs)
+        {
+            _fullscreenSince = 0;
+            _fullscreenRecheck?.Stop();
+            SetFullscreen(true);
+            return;
+        }
+        _fullscreenRecheck ??= CreateRecheckTimer();
+        _fullscreenRecheck.Start();
+    }
+
+    private DispatcherTimer CreateRecheckTimer()
+    {
+        var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) };
+        timer.Tick += (_, _) => EvaluateFullscreen();
+        return timer;
+    }
+
+    private void SetFullscreen(bool hide)
+    {
         _hiddenForFullscreen = hide;
         Log.Info($"{(hide ? "Fullscreen app detected; hiding bars" : "Fullscreen app gone; showing bars")} on {Monitor.DeviceName}.");
         _topBarAutoHide.SetFullScreen(hide);
@@ -226,11 +271,13 @@ public sealed class MonitorShell : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
         _services.Theme.Changed -= OnThemeChanged;
         _services.Foreground.Activated -= OnAppActivated;
         _services.Foreground.Changed -= OnForegroundChanged;
         _services.RunningApps.AppActivated -= OnAppActivated;
         _fullscreenWatchdog?.Stop();
+        _fullscreenRecheck?.Stop();
         _dockAutoHide.Dispose();
         _topBarAutoHide.Dispose();
         _topAppBar?.Dispose();

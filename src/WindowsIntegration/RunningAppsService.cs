@@ -148,15 +148,24 @@ public sealed class RunningAppsService : IDisposable
         _tasks.Initialize(true);
 
         _windows = _tasks.CreateGroupedWindowsCollection();
-        _windows.Filter = o => o is ApplicationWindow w && w.ShowInTaskbar;
+        _windows.Filter = o => o is ApplicationWindow w && w.ShowInTaskbar && !IsHelperWindow(w);
         if (_windows is ICollectionViewLiveShaping live)
         {
             live.IsLiveFiltering = true;
             live.LiveFilteringProperties.Add(nameof(ApplicationWindow.ShowInTaskbar));
+            live.LiveFilteringProperties.Add(nameof(ApplicationWindow.Title));
         }
         ((INotifyCollectionChanged)_windows).CollectionChanged += (_, _) => RequestRebuild();
         Rebuild();
     }
+
+    /// <summary>
+    /// Windows' own helper surfaces that Explorer's taskbar never lists: the file picker, and the
+    /// Microsoft 365 Calendar flyout that opens from the taskbar clock.
+    /// </summary>
+    private static bool IsHelperWindow(ApplicationWindow w) =>
+        (w.WinFileName?.EndsWith(@"\pickerhost.exe", StringComparison.OrdinalIgnoreCase) ?? false) ||
+        string.Equals(w.Title, "Calendar in Taskbar", StringComparison.Ordinal);
 
     public ObservableCollection<RunningApp> Apps { get; } = new();
 

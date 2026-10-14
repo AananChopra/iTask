@@ -30,6 +30,9 @@ public sealed class DockAutoHide : IDisposable
     private bool _enabled;
     private bool _fullScreen;     // a full-screen app owns the monitor: hidden, no edge reveal
     private bool _wantHidden;     // foreground app is maximized
+    private long _hideSince;      // when a maximized app was first seen in front (0 = none pending)
+    private const long HideConfirmMs = 200;
+    private readonly DispatcherTimer _recheck;
     private bool _revealed;       // shown because of the cursor, despite _wantHidden
     private DateTime _edgeSince = DateTime.MaxValue;
     private DateTime _leftSince = DateTime.MaxValue;
@@ -58,6 +61,8 @@ public sealed class DockAutoHide : IDisposable
         // how long a bad read can last.
         _watchdog = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
         _watchdog.Tick += (_, _) => Evaluate();
+        _recheck = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(80) };
+        _recheck.Tick += (_, _) => Evaluate();
         _foreground.Changed += OnForegroundChanged;
     }
 
@@ -101,16 +106,45 @@ public sealed class DockAutoHide : IDisposable
         if (_fullScreen)
         {
             _wantHidden = true;
+            _hideSince = 0;
+            _recheck.Stop();
         }
         else if (!_enabled)
         {
             _wantHidden = false;
+            _hideSince = 0;
+            _recheck.Stop();
         }
         else
         {
             var kind = ForegroundWatcher.Classify(_monitor.Handle, _monitor.Bounds);
             bool wasHidden = _wantHidden;
-            _wantHidden = AlwaysHide || kind == ForegroundKind.Maximized;
+            bool hide = AlwaysHide || kind == ForegroundKind.Maximized;
+            if (hide && !wasHidden && !AlwaysHide)
+            {
+                // Going away for a maximized app: only once that has held for a moment. A picker, a
+                // menu or an app mid-switch passes through "big window in front" briefly, and
+                // dipping the dock for it is a visible flicker.
+                long now = Environment.TickCount64;
+                if (_hideSince == 0)
+                    _hideSince = now;
+                if (now - _hideSince < HideConfirmMs)
+                {
+                    hide = false;
+                    _recheck.Start();
+                }
+                else
+                {
+                    _hideSince = 0;
+                    _recheck.Stop();
+                }
+            }
+            else
+            {
+                _hideSince = 0;
+                _recheck.Stop();
+            }
+            _wantHidden = hide;
             // Switching to a maximized app *from* the dock: stay put until the cursor leaves it.
             if (_wantHidden && !wasHidden && _offset < 0.5 && IsCursorOverDock())
             {
@@ -223,17 +257,32 @@ public sealed class DockAutoHide : IDisposable
         }
     }
 
+    private bool _inRendering;
+
     private void OnRendering(object? sender, EventArgs e)
     {
-        double t = _animMs <= 0 || !iTask.Utilities.SystemAnimations.Enabled
-            ? 1
-            : Math.Min(1, _animClock.Elapsed.TotalMilliseconds / _animMs);
-        // Ease-out when sliding in, ease-in when sliding away.
-        double eased = _animTo < _animFrom ? 1 - Math.Pow(1 - t, 3) : t * t * t;
-        _offset = _animFrom + (_animTo - _animFrom) * eased;
-        if (t >= 1)
-            StopAnimation();
-        Apply();
+        // WPF raises this synchronously from inside window moves/resizes, including the one Apply()
+        // below makes. Re-entering would move the window again from inside its own move (each
+        // level costs graphics objects), so nested calls are ignored; the outer call finishes the frame.
+        if (_inRendering)
+            return;
+        _inRendering = true;
+        try
+        {
+            double t = _animMs <= 0 || !iTask.Utilities.SystemAnimations.Enabled
+                ? 1
+                : Math.Min(1, _animClock.Elapsed.TotalMilliseconds / _animMs);
+            // Ease-out when sliding in, ease-in when sliding away.
+            double eased = _animTo < _animFrom ? 1 - Math.Pow(1 - t, 3) : t * t * t;
+            _offset = _animFrom + (_animTo - _animFrom) * eased;
+            if (t >= 1)
+                StopAnimation();
+            Apply();
+        }
+        finally
+        {
+            _inRendering = false;
+        }
     }
 
     private void StopAnimation()
@@ -265,6 +314,7 @@ public sealed class DockAutoHide : IDisposable
         _foreground.Changed -= OnForegroundChanged;
         _cursorTimer.Stop();
         _watchdog.Stop();
+        _recheck.Stop();
         StopAnimation();
     }
 }

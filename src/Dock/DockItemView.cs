@@ -70,6 +70,27 @@ internal sealed class DockItemView : Grid
         return new DockItemView(logo, size, maxScale) { IsStart = true };
     }
 
+    private System.ComponentModel.PropertyChangedEventHandler? _appChanged;
+
+    /// <summary>Calls <paramref name="onChanged"/> when the app changes, until <see cref="Untrack"/>.</summary>
+    public void Track(RunningApp app, Action onChanged)
+    {
+        _appChanged = (_, _) => onChanged();
+        app.PropertyChanged += _appChanged;
+    }
+
+    /// <summary>
+    /// Stops listening to the app. The app outlives its icon (a dock that is rebuilt, or closed
+    /// when its display goes away, leaves the view behind), so a listener left on it would keep
+    /// every discarded icon alive and refreshing.
+    /// </summary>
+    public void Untrack()
+    {
+        if (_appChanged is not null && App is not null)
+            App.PropertyChanged -= _appChanged;
+        _appChanged = null;
+    }
+
     /// <summary>Re-reads icon from the app (called when the running-apps list updates).</summary>
     public void Refresh()
     {

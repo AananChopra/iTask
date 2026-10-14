@@ -4,7 +4,7 @@ using System.Text;
 namespace iTask.WindowsIntegration;
 
 [StructLayout(LayoutKind.Sequential)]
-public struct RECT
+public struct RECT : IEquatable<RECT>
 {
     public int Left, Top, Right, Bottom;
 
@@ -12,6 +12,12 @@ public struct RECT
     {
         Left = left; Top = top; Right = right; Bottom = bottom;
     }
+
+    public readonly bool Equals(RECT other) =>
+        Left == other.Left && Top == other.Top && Right == other.Right && Bottom == other.Bottom;
+
+    public override readonly bool Equals(object? obj) => obj is RECT other && Equals(other);
+    public override readonly int GetHashCode() => HashCode.Combine(Left, Top, Right, Bottom);
 
     public readonly int Width => Right - Left;
     public readonly int Height => Bottom - Top;
@@ -50,6 +56,7 @@ internal static class NativeMethods
     public static readonly IntPtr HWND_NOTOPMOST = new(-2);
 
     // ── Messages ─────────────────────────────────────────────────────────────
+    public const int WM_SIZE = 0x0005;
     public const int WM_WINDOWPOSCHANGED = 0x0047;
     public const int WM_DISPLAYCHANGE = 0x007E;
     public const int WM_SETTINGCHANGE = 0x001A;
@@ -95,6 +102,14 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+
+    public const uint GW_OWNER = 4;
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetWindow(IntPtr hWnd, uint command);
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();

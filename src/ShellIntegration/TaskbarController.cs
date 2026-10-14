@@ -138,14 +138,23 @@ public sealed class TaskbarController : IDisposable
     }
 
     /// <summary>iTask draws a top bar and dock on every display, so every taskbar goes.</summary>
-    private static void HideTrays()
+    private void HideTrays()
     {
         foreach (var tray in FindTrayWindows())
         {
-            if (IsWindowVisible(tray))
-                ShowWindow(tray, SW_HIDE);
+            if (!IsWindowVisible(tray))
+                continue;
+            ShowWindow(tray, SW_HIDE);
+            // Worth knowing when and why Explorer put its taskbar back (rate-limited).
+            if (Environment.TickCount64 - _lastReshowLog > 10_000)
+            {
+                _lastReshowLog = Environment.TickCount64;
+                Log.Info($"The Windows taskbar showed itself ({WindowUtils.GetClassName(tray)}); hid it again. In front: {WindowUtils.DescribeForeground()}");
+            }
         }
     }
+
+    private long _lastReshowLog;
 
     private void Hook()
     {
