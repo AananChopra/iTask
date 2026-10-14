@@ -207,7 +207,8 @@ public partial class DockWindow : OverlayWindow
 
     public override void SetBounds(RECT r)
     {
-        bool unchanged = _bounds.Equals(r);
+        // Where the window really is, not just what we last asked for (see OverlayWindow.SetBounds).
+        bool unchanged = _bounds.Equals(r) && NativeMethods.GetWindowRect(Handle, out var actual) && actual.Equals(r);
         _bounds = r;
         NoteBounds(r);
         if (Glass is null || !TryGetGlassPlacement(out var glassWindow, out var shape, out float radius, out float dpi))

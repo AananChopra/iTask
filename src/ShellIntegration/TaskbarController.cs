@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Threading;
@@ -124,7 +124,7 @@ public sealed class TaskbarController : IDisposable
     private void Apply()
     {
         SetState(_originalState | ABS_AUTOHIDE);
-        HideTrays();
+        HideTrays(reportReshow: false);
         Hook();
 
         // The show hook misses some cases (a secondary taskbar Explorer recreates after a display
@@ -132,21 +132,22 @@ public sealed class TaskbarController : IDisposable
         if (_enforcer is null)
         {
             _enforcer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
-            _enforcer.Tick += (_, _) => HideTrays();
+            _enforcer.Tick += (_, _) => HideTrays(reportReshow: true);
         }
         _enforcer.Start();
     }
 
     /// <summary>iTask draws a top bar and dock on every display, so every taskbar goes.</summary>
-    private void HideTrays()
+    private void HideTrays(bool reportReshow)
     {
         foreach (var tray in FindTrayWindows())
         {
             if (!IsWindowVisible(tray))
                 continue;
             ShowWindow(tray, SW_HIDE);
-            // Worth knowing when and why Explorer put its taskbar back (rate-limited).
-            if (Environment.TickCount64 - _lastReshowLog > 10_000)
+            // Worth knowing when and why Explorer put its taskbar back (rate-limited). Not when
+            // we're hiding it in the first place.
+            if (reportReshow && Environment.TickCount64 - _lastReshowLog > 10_000)
             {
                 _lastReshowLog = Environment.TickCount64;
                 Log.Info($"The Windows taskbar showed itself ({WindowUtils.GetClassName(tray)}); hid it again. In front: {WindowUtils.DescribeForeground()}");
@@ -186,7 +187,7 @@ public sealed class TaskbarController : IDisposable
 
     /// <summary>
     /// Snapshot, not a lazy walk: FindWindowEx continues "after" a window in z-order, and callers
-    /// re-order these windows (HWND_TOPMOST) — with two secondary taskbars they'd leapfrog each
+    /// re-order these windows (HWND_TOPMOST) â€” with two secondary taskbars they'd leapfrog each
     /// other and the walk would never end.
     /// </summary>
     private static List<IntPtr> FindTrayWindows()

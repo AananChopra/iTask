@@ -110,7 +110,15 @@ public static class WindowUtils
             return "(none)";
         GetWindowThreadProcessId(fg, out uint pid);
         string name = "?";
-        try { name = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; } catch { }
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById((int)pid);
+            name = process.ProcessName;
+        }
+        catch
+        {
+            // exited, or not ours to look at
+        }
         var title = new StringBuilder(80);
         NativeMethods.GetWindowText(fg, title, title.Capacity);
         string rect = GetWindowRect(fg, out var r) ? r.ToString() : "?";

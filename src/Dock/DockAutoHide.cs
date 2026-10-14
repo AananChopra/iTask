@@ -52,7 +52,9 @@ public sealed class DockAutoHide : IDisposable
         _flyouts = flyouts;
         _monitor = monitor;
         // Only runs while the dock is auto-hidden or revealed; GetCursorPos is cheap.
-        _cursorTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(16) };
+        // 30 Hz: well inside the reveal dwell, and half the wakeups of 60 Hz for something that runs
+        // whenever a maximized app is in front (much of the day).
+        _cursorTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(33) };
         _cursorTimer.Tick += (_, _) => SampleCursor();
         // Safety net: we normally re-classify only on foreground-change events, but a rapid flurry of
         // them (e.g. hammering Win+D) can catch a window mid-transition — briefly and legitimately

@@ -168,8 +168,10 @@ public class OverlayWindow : Window
     public virtual void SetBounds(RECT r)
     {
         // WPF handles every move/resize with a render-target update (and a synchronous render pass),
-        // so moving a window to where it already is only costs.
-        if (_bounds is { } current && current.Equals(r))
+        // so moving a window to where it already is only costs. "Already is" means on screen, not
+        // what we last asked for: Windows moves and resizes our windows itself (display changes,
+        // waking from sleep, DPI changes), and the next layout must be able to put them back.
+        if (_bounds is { } current && current.Equals(r) && GetWindowRect(Handle, out var actual) && actual.Equals(r))
             return;
         _bounds = r;
         SetWindowPos(Handle, HWND_TOPMOST, r.Left, r.Top, r.Width, r.Height, SWP_NOACTIVATE);
