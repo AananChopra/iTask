@@ -27,7 +27,9 @@ public sealed class MonitorShell : IDisposable
     private DispatcherTimer? _fullscreenWatchdog;
     private DispatcherTimer? _fullscreenRecheck;
     private long _fullscreenSince;      // when a full-screen window was first seen (0 = none pending)
-    private const long FullscreenSteadyMs = 400;
+    // Long enough to ride out the few-millisecond screen-sized states (logged at 4-11 ms), short
+    // enough that a game or an F11 video gets the screen without a noticeable wait.
+    private const long FullscreenSteadyMs = 150;
     private bool _disposed;
 
     public MonitorShell(MonitorInfo monitor, AppSettings settings, ShellServices services)

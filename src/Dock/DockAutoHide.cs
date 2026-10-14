@@ -30,9 +30,6 @@ public sealed class DockAutoHide : IDisposable
     private bool _enabled;
     private bool _fullScreen;     // a full-screen app owns the monitor: hidden, no edge reveal
     private bool _wantHidden;     // foreground app is maximized
-    private long _hideSince;      // when a maximized app was first seen in front (0 = none pending)
-    private const long HideConfirmMs = 200;
-    private readonly DispatcherTimer _recheck;
     private bool _revealed;       // shown because of the cursor, despite _wantHidden
     private DateTime _edgeSince = DateTime.MaxValue;
     private DateTime _leftSince = DateTime.MaxValue;
@@ -52,9 +49,7 @@ public sealed class DockAutoHide : IDisposable
         _flyouts = flyouts;
         _monitor = monitor;
         // Only runs while the dock is auto-hidden or revealed; GetCursorPos is cheap.
-        // 30 Hz: well inside the reveal dwell, and half the wakeups of 60 Hz for something that runs
-        // whenever a maximized app is in front (much of the day).
-        _cursorTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(33) };
+        _cursorTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(16) };
         _cursorTimer.Tick += (_, _) => SampleCursor();
         // Safety net: we normally re-classify only on foreground-change events, but a rapid flurry of
         // them (e.g. hammering Win+D) can catch a window mid-transition — briefly and legitimately
@@ -63,8 +58,6 @@ public sealed class DockAutoHide : IDisposable
         // how long a bad read can last.
         _watchdog = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
         _watchdog.Tick += (_, _) => Evaluate();
-        _recheck = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(80) };
-        _recheck.Tick += (_, _) => Evaluate();
         _foreground.Changed += OnForegroundChanged;
     }
 
@@ -108,45 +101,16 @@ public sealed class DockAutoHide : IDisposable
         if (_fullScreen)
         {
             _wantHidden = true;
-            _hideSince = 0;
-            _recheck.Stop();
         }
         else if (!_enabled)
         {
             _wantHidden = false;
-            _hideSince = 0;
-            _recheck.Stop();
         }
         else
         {
             var kind = ForegroundWatcher.Classify(_monitor.Handle, _monitor.Bounds);
             bool wasHidden = _wantHidden;
-            bool hide = AlwaysHide || kind == ForegroundKind.Maximized;
-            if (hide && !wasHidden && !AlwaysHide)
-            {
-                // Going away for a maximized app: only once that has held for a moment. A picker, a
-                // menu or an app mid-switch passes through "big window in front" briefly, and
-                // dipping the dock for it is a visible flicker.
-                long now = Environment.TickCount64;
-                if (_hideSince == 0)
-                    _hideSince = now;
-                if (now - _hideSince < HideConfirmMs)
-                {
-                    hide = false;
-                    _recheck.Start();
-                }
-                else
-                {
-                    _hideSince = 0;
-                    _recheck.Stop();
-                }
-            }
-            else
-            {
-                _hideSince = 0;
-                _recheck.Stop();
-            }
-            _wantHidden = hide;
+            _wantHidden = AlwaysHide || kind == ForegroundKind.Maximized;
             // Switching to a maximized app *from* the dock: stay put until the cursor leaves it.
             if (_wantHidden && !wasHidden && _offset < 0.5 && IsCursorOverDock())
             {
@@ -316,7 +280,6 @@ public sealed class DockAutoHide : IDisposable
         _foreground.Changed -= OnForegroundChanged;
         _cursorTimer.Stop();
         _watchdog.Stop();
-        _recheck.Stop();
         StopAnimation();
     }
 }

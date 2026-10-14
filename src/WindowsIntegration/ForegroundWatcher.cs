@@ -85,7 +85,10 @@ public sealed class ForegroundWatcher : IDisposable
         if (IsZoomed(front))
             return ForegroundKind.Maximized;
         if (GetWindowRect(front, out var r) && r.Left <= monitorBounds.Left && r.Top <= monitorBounds.Top &&
-            r.Right >= monitorBounds.Right && r.Bottom >= monitorBounds.Bottom)
+            r.Right >= monitorBounds.Right && r.Bottom >= monitorBounds.Bottom &&
+            // The file picker and dialogs are screen-sized for a moment as they open; that isn't an app.
+            GetWindow(front, GW_OWNER) == IntPtr.Zero && WindowUtils.GetClassName(front) != "#32770" &&
+            !WindowUtils.IsHelperProcess(front))
             return ForegroundKind.Maximized; // borderless full-screen
         return ForegroundKind.Windowed;
     }
