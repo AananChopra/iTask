@@ -348,6 +348,12 @@ internal static class NativeMethods
 
     [DllImport("dwmapi.dll")]
     public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
+
+    /// <summary>Where a window is actually drawn: GetWindowRect includes its invisible ~8 px resize borders.</summary>
+    public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT value, int size);
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     public const int DWMWA_BORDER_COLOR = 34;

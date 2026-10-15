@@ -10,7 +10,7 @@ public enum ForegroundKind
     Desktop,
     /// <summary>A normal, non-maximized application window.</summary>
     Windowed,
-    /// <summary>A maximized or full-screen application window.</summary>
+    /// <summary>A maximized, full-screen or snapped (split screen) application window.</summary>
     Maximized,
 }
 
@@ -90,7 +90,28 @@ public sealed class ForegroundWatcher : IDisposable
             GetWindow(front, GW_OWNER) == IntPtr.Zero && WindowUtils.GetClassName(front) != "#32770" &&
             !WindowUtils.IsHelperProcess(front))
             return ForegroundKind.Maximized; // borderless full-screen
+        if (IsSnappedToBottom(front, monitor))
+            return ForegroundKind.Maximized; // split screen / snapped
         return ForegroundKind.Windowed;
+    }
+
+    /// <summary>
+    /// True when a window's drawn area reaches the bottom of the display's work area and is at least a
+    /// quarter as wide: split-screen halves, snap layouts (thirds, quarters), a window dragged to the
+    /// bottom edge. The floating dock would sit on top of it (it reserves no space), so it gets out
+    /// of the way, just as it does for a maximized window.
+    /// </summary>
+    public static bool ReachesBottom(RECT visible, RECT work) =>
+        visible.Bottom >= work.Bottom - 2 && visible.Width * 4 >= work.Width &&
+        visible.Right > work.Left && visible.Left < work.Right;
+
+    private static bool IsSnappedToBottom(IntPtr hwnd, IntPtr monitor)
+    {
+        // The drawn bounds, not GetWindowRect: resizable windows have ~8 px of invisible border.
+        if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT visible, System.Runtime.InteropServices.Marshal.SizeOf<RECT>()) != 0)
+            return false;
+        var info = new MONITORINFOEX { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFOEX>() };
+        return GetMonitorInfo(monitor, ref info) && ReachesBottom(visible, info.rcWork);
     }
 
     private static IntPtr FrontMostAppWindow(IntPtr monitor)
