@@ -29,6 +29,7 @@ public sealed class HealthMonitor : IDisposable
     private int _previousGdi = -1;
     private int _reportedGdiStep;
     private string _lastMessages = "";
+    private bool _reportedOnce;
     private readonly Stopwatch _uptime = Stopwatch.StartNew();
     private bool _disposed;
 
@@ -75,7 +76,8 @@ public sealed class HealthMonitor : IDisposable
                 _reportedGdiStep = Math.Max(_reportedGdiStep, gdi / 1000);
                 Log.Info($"Health: gdi={gdi} user={user} handles={self.HandleCount} " +
                          $"memory={self.PrivateMemorySize64 / (1024 * 1024)}MB managed={GC.GetTotalMemory(false) / (1024 * 1024)}MB" +
-                         (gdi >= 1000 ? $"; by type:{GdiBreakdown(self)}" : ""));
+                         (gdi >= 1000 || !_reportedOnce ? $"; by type:{GdiBreakdown(self)}" : ""));
+                _reportedOnce = true; // the first line shows a normal breakdown to compare a surge against
             }
 
             // A surge is the start of a runaway (it has gone from ~170 to the 10,000 limit in seconds,
@@ -169,6 +171,7 @@ public sealed class HealthMonitor : IDisposable
                 return " (unavailable)";
 
             var counts = new SortedDictionary<int, int>();
+            var bitmapSizes = new Dictionary<string, int>();
             int pid = self.Id & 0xFFFF;
             for (int i = 0; i < 65536; i++)
             {
@@ -177,8 +180,20 @@ public sealed class HealthMonitor : IDisposable
                     continue;
                 int type = buffer[offset + 14] & 0x7F;
                 counts[type] = counts.GetValueOrDefault(type) + 1;
+
+                if (type == 5)
+                {
+                    // A GDI handle is the table index plus the entry's "upper" word in the high half.
+                    var handle = (IntPtr)(i | (BitConverter.ToUInt16(buffer, offset + 12) << 16));
+                    string size = GetObject(handle, Marshal.SizeOf<BitmapInfo>(), out var bitmap) != 0
+                        ? $"{bitmap.Width}x{bitmap.Height}x{bitmap.BitsPixel}"
+                        : "?";
+                    bitmapSizes[size] = bitmapSizes.GetValueOrDefault(size) + 1;
+                }
             }
-            return string.Concat(counts.Select(kv => $" {TypeName(kv.Key)}={kv.Value}"));
+            string text = string.Concat(counts.Select(kv => $" {TypeName(kv.Key)}={kv.Value}"));
+            // Which window is leaking shows in the bitmap sizes (top bar 2560x35, dock, glass…).
+            return text + "; bitmap sizes: " + string.Join(" ", bitmapSizes.OrderByDescending(kv => kv.Value).Take(6).Select(kv => $"{kv.Key}={kv.Value}"));
         }
         catch (Exception ex)
         {
@@ -197,6 +212,17 @@ public sealed class HealthMonitor : IDisposable
     {
         public IntPtr Reserved1, PebBaseAddress, Reserved2a, Reserved2b, UniqueProcessId, Reserved3;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BitmapInfo
+    {
+        public int Type, Width, Height, WidthBytes;
+        public ushort Planes, BitsPixel;
+        public IntPtr Bits;
+    }
+
+    [DllImport("gdi32.dll")]
+    private static extern int GetObject(IntPtr handle, int size, out BitmapInfo bitmap);
 
     [DllImport("user32.dll")]
     private static extern uint GetGuiResources(IntPtr process, uint flags);

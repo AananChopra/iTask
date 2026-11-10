@@ -42,6 +42,12 @@ public sealed class AppHost : IDisposable
         _messages.TaskbarCreated += OnTaskbarCreated;
         _messages.DisplayChanged += (_, _) => _displayDebounce.Start();
         _messages.WorkAreaChanged += (_, _) => _shells.ForEach(s => s.RequestLayout());
+        _messages.DisplayPowerChanged += (_, on) =>
+        {
+            Log.Info($"Display turned {(on ? "on" : "off")}.");
+            if (on)
+                OnWake("display on");
+        };
         Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
         _explorerTaskbar = WindowUtils.FindExplorerTaskbar();
@@ -136,23 +142,39 @@ public sealed class AppHost : IDisposable
         if (e.Mode != Microsoft.Win32.PowerModes.Resume)
             return;
         // Raised on a system events thread; the timers must live on the UI thread.
-        Application.Current?.Dispatcher.BeginInvoke(() =>
+        Application.Current?.Dispatcher.BeginInvoke(() => OnWake("resume"));
+    }
+
+    private DateTime _lastWake = DateTime.MinValue;
+
+    /// <summary>
+    /// The machine woke (classic resume, or the display coming back on, which is all a Modern Standby
+    /// wake announces). Windows rebuilds the displays and sometimes moves our windows and reservations
+    /// while it does; check again once things have settled (twice: displays can take a while).
+    /// </summary>
+    private void OnWake(string source)
+    {
+        if (_disposed)
+            return;
+        // Both notifications can arrive for one wake.
+        if (DateTime.UtcNow - _lastWake < TimeSpan.FromSeconds(5))
+            return;
+        _lastWake = DateTime.UtcNow;
+        Log.Info($"Woke up ({source}); will re-check the layout.");
+        foreach (var delay in new[] { 2, 8 })
         {
-            foreach (var delay in new[] { 2, 8 })
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(delay) };
+            timer.Tick += (_, _) =>
             {
-                var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(delay) };
-                timer.Tick += (_, _) =>
-                {
-                    timer.Stop();
-                    if (_disposed)
-                        return;
-                    Log.Info("Resumed from sleep; re-checking layout.");
-                    _displayDebounce.Stop();
-                    _displayDebounce.Start();
-                };
-                timer.Start();
-            }
-        });
+                timer.Stop();
+                if (_disposed)
+                    return;
+                Log.Info($"Re-checking the layout {delay}s after waking.");
+                _displayDebounce.Stop();
+                _displayDebounce.Start();
+            };
+            timer.Start();
+        }
     }
 
     private DateTime _lastTaskbarReset = DateTime.MinValue;
